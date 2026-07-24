@@ -1,0 +1,101 @@
+<UserControl x:Class="LatencyBench.App.Views.MsiModeView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="clr-namespace:LatencyBench.App.ViewModels"
+             xmlns:controls="clr-namespace:LatencyBench.App.Controls"
+             d:DataContext="{d:DesignInstance Type=vm:MsiModeViewModel}"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008/design"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" mc:Ignorable="d">
+    <DockPanel Margin="24">
+        <DockPanel DockPanel.Dock="Top" Margin="0,0,0,4" LastChildFill="False">
+            <StackPanel DockPanel.Dock="Left" Orientation="Horizontal" VerticalAlignment="Center">
+                <controls:Icon Kind="Msi" IconBrush="{StaticResource TextPrimaryBrush}" Width="16" Height="16" Margin="0,0,8,0"/>
+                <TextBlock Text="MSI mode" Style="{StaticResource HeadingText}"/>
+            </StackPanel>
+            <Button Content="Refresh" Style="{StaticResource AppButton}" DockPanel.Dock="Right"
+                    Command="{Binding RefreshCommand}"/>
+        </DockPanel>
+        <TextBlock DockPanel.Dock="Top" Text="Message-Signaled Interrupts (MSI) let a device signal the CPU directly instead of sharing a legacy interrupt line, and IRQ priority tells Windows how urgently to service it — both usually lower, steadier interrupt latency. Covers every interrupt-capable device: USB controllers, GPU, network, audio, storage. Changes take effect after you restart the device (or reboot)."
+                   Style="{StaticResource SecondaryText}" TextWrapping="Wrap" Margin="0,0,0,16"/>
+
+        <TextBlock DockPanel.Dock="Top" Text="{Binding ErrorMessage}" Style="{StaticResource SecondaryText}"
+                   Foreground="{StaticResource DangerBrush}" TextWrapping="Wrap" Margin="0,0,0,12"
+                   Visibility="{Binding ErrorMessage, Converter={StaticResource StringToVisibilityConverter}}"/>
+
+        <Border Style="{StaticResource CardBorder}" DockPanel.Dock="Top" Margin="0,0,0,16"
+                Visibility="{Binding Devices.Count, Converter={StaticResource ZeroToVisibleConverter}}">
+            <StackPanel HorizontalAlignment="Center" Margin="0,20">
+                <TextBlock Text="No interrupt-capable devices found" Style="{StaticResource BodyText}" FontWeight="Medium" HorizontalAlignment="Center"/>
+                <TextBlock Text="Some drivers don't expose this option at all." Style="{StaticResource SecondaryText}" HorizontalAlignment="Center" Margin="0,6,0,0"/>
+            </StackPanel>
+        </Border>
+
+        <Border DockPanel.Dock="Top" CornerRadius="6" Padding="10,8" Margin="0,0,0,12"
+                Background="{StaticResource WarningBgBrush}"
+                Visibility="{Binding PendingChangesMessage, Converter={StaticResource StringToVisibilityConverter}}">
+            <TextBlock Text="{Binding PendingChangesMessage}" TextWrapping="Wrap" Foreground="{StaticResource WarningBrush}"/>
+        </Border>
+
+        <Border Style="{StaticResource CardBorder}" DockPanel.Dock="Top" Margin="0,0,0,16">
+            <StackPanel>
+                <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                    <controls:Icon Kind="Advisor" IconBrush="{StaticResource AccentBrush}" Margin="0,0,7,0"/>
+                    <TextBlock Text="Advisor" Style="{StaticResource BodyText}" FontWeight="Medium"/>
+                </StackPanel>
+                <TextBlock Text="{Binding AdvisorMessage}" Style="{StaticResource SecondaryText}" TextWrapping="Wrap"/>
+            </StackPanel>
+        </Border>
+
+        <!-- No inner ScrollViewer here on purpose — see AffinityView.xaml for why: MainWindow.xaml
+             already provides one outer ScrollViewer for the whole tab, and nesting a second one here
+             silently swallowed the mouse wheel without ever scrolling anything. -->
+        <ItemsControl ItemsSource="{Binding Devices}">
+            <ItemsControl.ItemTemplate>
+                <DataTemplate DataType="{x:Type vm:InterruptDeviceViewModel}">
+                    <Border Style="{StaticResource CardBorder}" Margin="0,0,0,12">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Grid.Column="0">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="{Binding DeviceLabel}" Style="{StaticResource BodyText}" FontWeight="Medium"
+                                               TextWrapping="Wrap" Margin="0,0,8,0"/>
+                                    <Border Grid.Column="1" CornerRadius="6" Padding="8,3" Background="{StaticResource SurfaceHoverBrush}" VerticalAlignment="Top">
+                                        <TextBlock Text="{Binding CategoryLabel}" FontSize="11" Style="{StaticResource MutedText}"/>
+                                    </Border>
+                                </Grid>
+                                <TextBlock Text="{Binding IsMsiEnabled, Converter={StaticResource MsiStateConverter}}" Style="{StaticResource SecondaryText}" Margin="0,6,0,0"/>
+
+                                <DockPanel Margin="0,8,0,0" LastChildFill="False">
+                                    <TextBlock Text="IRQ priority" Style="{StaticResource SecondaryText}" DockPanel.Dock="Left" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                                    <ComboBox DockPanel.Dock="Left" Width="110" HorizontalAlignment="Left"
+                                              ItemsSource="{x:Static vm:InterruptDeviceViewModel.AvailablePriorities}"
+                                              SelectedItem="{Binding SelectedPriority}"/>
+                                </DockPanel>
+
+                                <TextBlock Text="{Binding StatusMessage}" Style="{StaticResource MutedText}" Margin="0,6,0,0" TextWrapping="Wrap"
+                                           Visibility="{Binding StatusMessage, Converter={StaticResource StringToVisibilityConverter}}"/>
+                            </StackPanel>
+                            <StackPanel Grid.Column="1" VerticalAlignment="Top">
+                                <Button Content="{Binding IsMsiEnabled, Converter={StaticResource MsiToggleLabelConverter}}"
+                                        Style="{StaticResource AppButton}" HorizontalAlignment="Right" Command="{Binding ToggleMsiCommand}"/>
+                                <Button Content="Restart device" Style="{StaticResource AppButton}" Margin="0,6,0,0" HorizontalAlignment="Right"
+                                        Command="{Binding RestartCommand}" ToolTip="{Binding RestartHint}"
+                                        Visibility="{Binding CanRestart, Converter={StaticResource BoolToVisibleConverter}}"/>
+                                <TextBlock Text="Needs reboot" Style="{StaticResource MutedText}" Margin="0,6,0,0" HorizontalAlignment="Right"
+                                           ToolTip="{Binding RestartHint}"
+                                           Visibility="{Binding CanRestart, Converter={StaticResource InverseBoolToVisibleConverter}}"/>
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+                </DataTemplate>
+            </ItemsControl.ItemTemplate>
+        </ItemsControl>
+    </DockPanel>
+</UserControl>

@@ -1,0 +1,8 @@
+<UserControl x:Class="LatencyBench.App.Controls.Icon"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             Width="15" Height="15">
+    <Viewbox Stretch="Uniform">
+        <Canvas x:Name="Host" Width="16" Height="16"/>
+    </Viewbox>
+</UserControl>

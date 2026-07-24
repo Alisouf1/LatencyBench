@@ -1,0 +1,100 @@
+<UserControl x:Class="LatencyBench.App.Views.TweaksView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="clr-namespace:LatencyBench.App.ViewModels"
+             xmlns:controls="clr-namespace:LatencyBench.App.Controls"
+             d:DataContext="{d:DesignInstance Type=vm:TweaksViewModel}"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008/design"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" mc:Ignorable="d">
+    <DockPanel Margin="24">
+        <DockPanel DockPanel.Dock="Top" Margin="0,0,0,4" LastChildFill="False">
+            <StackPanel DockPanel.Dock="Left" Orientation="Horizontal" VerticalAlignment="Center">
+                <controls:Icon Kind="Tweaks" IconBrush="{StaticResource TextPrimaryBrush}" Width="16" Height="16" Margin="0,0,8,0"/>
+                <TextBlock Text="Tweaks" Style="{StaticResource HeadingText}"/>
+            </StackPanel>
+            <Button Content="Rescan state" Style="{StaticResource AppButton}" DockPanel.Dock="Right" Margin="0,0,8,0"
+                    Command="{Binding RefreshCommand}"/>
+            <Button Content="Revert all to default" Style="{StaticResource AppButton}" DockPanel.Dock="Right" Margin="0,0,8,0"
+                    Command="{Binding RevertAllCommand}" IsEnabled="{Binding IsLoading, Converter={StaticResource InverseBoolConverter}}"
+                    ToolTip="Reverts every currently-applied tweak back to its default in one click, including aggressive ones — reverting is always the safe direction."/>
+            <Button Content="Apply all" Style="{StaticResource AppButton}" DockPanel.Dock="Right" Margin="0,0,8,0"
+                    Command="{Binding ApplyAllCommand}" IsEnabled="{Binding IsLoading, Converter={StaticResource InverseBoolConverter}}"
+                    ToolTip="Applies every tweak not yet applied, in one click. Aggressive tweaks (e.g. disabling SysMain) are skipped here on purpose — apply those individually."/>
+        </DockPanel>
+        <TextBlock DockPanel.Dock="Top" Text="Each tweak only changes when you click Apply, and can be reverted individually. Nothing here runs automatically."
+                   Style="{StaticResource SecondaryText}" TextWrapping="Wrap" Margin="0,0,0,12"/>
+
+        <TextBlock DockPanel.Dock="Top" Text="{Binding BatchActionStatus}" Style="{StaticResource SecondaryText}"
+                   TextWrapping="Wrap" Margin="0,0,0,12"
+                   Visibility="{Binding BatchActionStatus, Converter={StaticResource StringToVisibilityConverter}}"/>
+
+        <Border DockPanel.Dock="Top" Style="{StaticResource CardBorder}" Margin="0,0,0,16" Background="{StaticResource WarningBgBrush}" BorderBrush="{StaticResource WarningBrush}">
+            <StackPanel>
+                <DockPanel LastChildFill="False">
+                    <TextBlock Text="Create a restore point before applying tweaks" Style="{StaticResource BodyText}" FontWeight="Medium"
+                               Foreground="{StaticResource WarningBrush}" DockPanel.Dock="Left" VerticalAlignment="Center"/>
+                    <Button Content="Create restore point" Style="{StaticResource AppButton}" DockPanel.Dock="Right"
+                            Command="{Binding CreateRestorePointCommand}"/>
+                </DockPanel>
+                <TextBlock Text="{Binding RestorePointStatus}" Style="{StaticResource SecondaryText}" Margin="0,6,0,0" TextWrapping="Wrap"
+                           Visibility="{Binding RestorePointStatus, Converter={StaticResource StringToVisibilityConverter}}"/>
+            </StackPanel>
+        </Border>
+
+        <!-- No inner ScrollViewer here on purpose — see AffinityView.xaml for why: MainWindow.xaml
+             already provides one outer ScrollViewer for the whole tab, and nesting a second one here
+             silently swallowed the mouse wheel without ever scrolling anything. -->
+        <!-- IsEnabled gates the whole list on IsLoading (WPF cascades disabled state to every
+             descendant button) — ApplyAll/RevertAll yield between tweaks so the UI stays responsive,
+             which otherwise leaves a window where clicking an individual tweak's own Apply/Revert
+             mid-batch races the batch loop: it would re-check that tweak's State when it got there and
+             could silently redo the opposite of what was just clicked by hand. -->
+        <ItemsControl ItemsSource="{Binding Groups}" IsEnabled="{Binding IsLoading, Converter={StaticResource InverseBoolConverter}}">
+            <ItemsControl.ItemTemplate>
+                <DataTemplate DataType="{x:Type vm:TweakCategoryGroupViewModel}">
+                    <Border Style="{StaticResource CardBorder}" Margin="0,0,0,12">
+                        <StackPanel>
+                            <TextBlock Text="{Binding CategoryName}" Style="{StaticResource BodyText}" FontWeight="Medium" Margin="0,0,0,10"/>
+                            <ItemsControl ItemsSource="{Binding Tweaks}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate DataType="{x:Type vm:TweakViewModel}">
+                                        <Border BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,0,0,1" Padding="0,10">
+                                            <StackPanel>
+                                                <DockPanel LastChildFill="False">
+                                                    <StackPanel DockPanel.Dock="Left" MaxWidth="440">
+                                                        <StackPanel Orientation="Horizontal">
+                                                            <TextBlock Text="{Binding Definition.Name}" Style="{StaticResource BodyText}" FontWeight="Medium"/>
+                                                            <Border CornerRadius="6" Padding="6,2" Margin="8,0,0,0" VerticalAlignment="Center"
+                                                                    Background="{StaticResource WarningBgBrush}"
+                                                                    Visibility="{Binding Definition.RequiresReboot, Converter={StaticResource BoolToVisibleConverter}}">
+                                                                <TextBlock Text="restart required" FontSize="10" Foreground="{StaticResource WarningBrush}"/>
+                                                            </Border>
+                                                        </StackPanel>
+                                                        <TextBlock Text="{Binding Definition.Description}" Style="{StaticResource SecondaryText}" TextWrapping="Wrap" Margin="0,4,0,0"/>
+                                                        <TextBlock Text="{Binding StatusMessage}" Style="{StaticResource MutedText}" TextWrapping="Wrap" Margin="0,4,0,0"
+                                                                   Visibility="{Binding StatusMessage, Converter={StaticResource StringToVisibilityConverter}}"/>
+                                                    </StackPanel>
+                                                    <StackPanel DockPanel.Dock="Right" HorizontalAlignment="Right">
+                                                        <Border CornerRadius="6" Padding="8,3" HorizontalAlignment="Right"
+                                                                Background="{Binding State, Converter={StaticResource TweakStateToBrushConverter}}">
+                                                            <TextBlock Text="{Binding State}" FontSize="11" FontWeight="Medium"
+                                                                       Foreground="{Binding State, Converter={StaticResource TweakStateToBrushConverter}, ConverterParameter=Foreground}"/>
+                                                        </Border>
+                                                        <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                                                            <Button Content="Apply" Style="{StaticResource AccentButton}" Command="{Binding ApplyCommand}" IsEnabled="{Binding IsBusy, Converter={StaticResource InverseBoolConverter}}"/>
+                                                            <Button Content="Revert" Style="{StaticResource AppButton}" Command="{Binding RevertCommand}" Margin="6,0,0,0" IsEnabled="{Binding IsBusy, Converter={StaticResource InverseBoolConverter}}"/>
+                                                        </StackPanel>
+                                                    </StackPanel>
+                                                </DockPanel>
+                                            </StackPanel>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+                    </Border>
+                </DataTemplate>
+            </ItemsControl.ItemTemplate>
+        </ItemsControl>
+    </DockPanel>
+</UserControl>

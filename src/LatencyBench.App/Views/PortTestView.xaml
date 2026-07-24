@@ -1,0 +1,268 @@
+<UserControl x:Class="LatencyBench.App.Views.PortTestView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="clr-namespace:LatencyBench.App.ViewModels"
+             xmlns:controls="clr-namespace:LatencyBench.App.Controls"
+             xmlns:models="clr-namespace:LatencyBench.Core.Models;assembly=LatencyBench.Core"
+             d:DataContext="{d:DesignInstance Type=vm:PortTestViewModel}"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008/design"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" mc:Ignorable="d">
+    <UserControl.Resources>
+        <Style x:Key="RowToggleStyle" TargetType="ToggleButton">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ToggleButton">
+                        <Border Background="{TemplateBinding Background}">
+                            <ContentPresenter/>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </UserControl.Resources>
+    <!-- LastChildFill="False": every card is docked Top and sized to its own content, so the last
+         card (Advisor) doesn't stretch to absorb all leftover height. -->
+    <DockPanel Margin="24" LastChildFill="False">
+        <DockPanel DockPanel.Dock="Top" Margin="0,0,0,4" LastChildFill="False">
+            <StackPanel DockPanel.Dock="Left" Orientation="Horizontal" VerticalAlignment="Center">
+                <controls:Icon Kind="PortTest" IconBrush="{StaticResource TextPrimaryBrush}" Width="16" Height="16" Margin="0,0,8,0"/>
+                <TextBlock Text="Port test" Style="{StaticResource HeadingText}"/>
+            </StackPanel>
+            <Button Content="Refresh devices" Style="{StaticResource AppButton}" DockPanel.Dock="Right"
+                    Command="{Binding RefreshDevicesCommand}"/>
+        </DockPanel>
+        <TextBlock DockPanel.Dock="Top" Text="Measures jitter, polling rate, and the time between HID reports (not true click-to-screen input lag, which needs specialized hardware) for a device you pick below."
+                   Style="{StaticResource SecondaryText}" TextWrapping="Wrap" Margin="0,0,0,16"/>
+
+        <Border DockPanel.Dock="Top" CornerRadius="6" Padding="10,8" Margin="0,0,0,12"
+                Background="{StaticResource WarningBgBrush}"
+                Visibility="{Binding ContentionMessage, Converter={StaticResource StringToVisibilityConverter}}">
+            <TextBlock Text="{Binding ContentionMessage}" TextWrapping="Wrap" Foreground="{StaticResource WarningBrush}"/>
+        </Border>
+
+        <Border Style="{StaticResource CardBorder}" DockPanel.Dock="Top" Margin="0,0,0,16">
+            <StackPanel>
+                <TextBlock Text="Device" Style="{StaticResource SecondaryText}" Margin="0,0,0,6"/>
+                <ComboBox ItemsSource="{Binding Devices}" SelectedItem="{Binding SelectedDevice}"
+                          DisplayMemberPath="DisplayLabel" IsEnabled="{Binding IsTesting, Converter={StaticResource InverseBoolConverter}}"/>
+
+                <CheckBox Content="{Binding LoadDescription}" IsChecked="{Binding TestUnderLoad}" Margin="0,12,0,0"
+                          IsEnabled="{Binding IsTesting, Converter={StaticResource InverseBoolConverter}}"
+                          ToolTip="Jitter that looks fine on an idle desktop often doesn't survive a loaded system — this measures the state that actually matters while gaming. Loaded and idle runs are compared separately."/>
+
+                <CheckBox Content="Diagnose late reports (traces drivers during the test)" IsChecked="{Binding DiagnoseLateReports}" Margin="0,6,0,0"
+                          IsEnabled="{Binding IsTesting, Converter={StaticResource InverseBoolConverter}}"
+                          ToolTip="Traces DPC/ISR while testing and reports which driver is actually delaying reports. Tracing adds overhead, so this run's jitter is indicative only — and it can't run while the DPC/ISR tab is tracing."/>
+
+                <Button Content="{Binding IsTesting, Converter={StaticResource TestingLabelConverter}}"
+                        Style="{StaticResource AccentButton}" HorizontalAlignment="Left" Margin="0,12,0,0"
+                        Command="{Binding StartTestCommand}" IsEnabled="{Binding IsTesting, Converter={StaticResource InverseBoolConverter}}"/>
+
+                <StackPanel Orientation="Horizontal" Margin="0,10,0,0"
+                            Visibility="{Binding IsTesting, Converter={StaticResource BoolToVisibleConverter}}">
+                    <TextBlock Text="{Binding SecondsRemaining, StringFormat='{}{0}s remaining'}" Style="{StaticResource BodyText}"/>
+                    <TextBlock Text="{Binding LiveSampleCount, StringFormat='{}· {0} samples so far'}" Style="{StaticResource SecondaryText}" Margin="8,0,0,0"/>
+                </StackPanel>
+                <TextBlock Text="{Binding StatusMessage}" Style="{StaticResource SecondaryText}" TextWrapping="Wrap" Margin="0,8,0,0"
+                           Visibility="{Binding StatusMessage, Converter={StaticResource StringToVisibilityConverter}}"/>
+
+                <Border Height="64" Margin="0,12,0,0" ClipToBounds="True"
+                        Visibility="{Binding IsTesting, Converter={StaticResource BoolToVisibleConverter}}">
+                    <Polyline Points="{Binding LiveIntervals, Converter={StaticResource IntervalsToPolylinePointsConverter}}"
+                              Stroke="{StaticResource AccentBrush}" StrokeThickness="2"
+                              StrokeLineJoin="Round" HorizontalAlignment="Left"/>
+                </Border>
+                <TextBlock Text="Interval between HID reports — a flatter line means steadier polling."
+                           Style="{StaticResource MutedText}" Margin="0,4,0,0"
+                           Visibility="{Binding IsTesting, Converter={StaticResource BoolToVisibleConverter}}"/>
+
+                <UniformGrid Columns="3" Margin="0,12,0,0"
+                             Visibility="{Binding IsTesting, Converter={StaticResource BoolToVisibleConverter}}">
+                    <StackPanel Margin="0,0,8,0">
+                        <TextBlock Text="{Binding LiveJitterMs, StringFormat='{}{0:0.000} ms', TargetNullValue='—'}"
+                                   Style="{StaticResource BodyText}" FontWeight="Medium" FontSize="18"/>
+                        <TextBlock Text="jitter (live)" Style="{StaticResource MutedText}"/>
+                    </StackPanel>
+                    <StackPanel Margin="8,0">
+                        <TextBlock Text="{Binding LiveLatencyMs, StringFormat='{}{0:0.00} ms', TargetNullValue='—'}"
+                                   Style="{StaticResource BodyText}" FontWeight="Medium" FontSize="18"/>
+                        <TextBlock Text="report latency (live)" Style="{StaticResource MutedText}"/>
+                    </StackPanel>
+                    <StackPanel Margin="8,0,0,0">
+                        <TextBlock Text="{Binding LivePollingRateHz, StringFormat='{}{0:0} Hz', TargetNullValue='—'}"
+                                   Style="{StaticResource BodyText}" FontWeight="Medium" FontSize="18"/>
+                        <TextBlock Text="polling rate (live)" Style="{StaticResource MutedText}"/>
+                    </StackPanel>
+                </UniformGrid>
+            </StackPanel>
+        </Border>
+
+        <Border Style="{StaticResource CardBorder}" DockPanel.Dock="Top" Margin="0,0,0,16"
+                Visibility="{Binding LastResult, Converter={StaticResource NullToVisibleConverter}}">
+            <StackPanel>
+                <StackPanel DataContext="{Binding LastResult}">
+                    <TextBlock Text="{Binding PortLabel}" Style="{StaticResource BodyText}" FontWeight="Medium" Margin="0,0,0,10"/>
+                    <DockPanel Margin="0,3">
+                        <TextBlock Text="Jitter" Style="{StaticResource SecondaryText}" DockPanel.Dock="Left"/>
+                        <TextBlock Text="{Binding JitterMs, StringFormat='{}{0:0.000} ms'}" Style="{StaticResource BodyText}" HorizontalAlignment="Right"/>
+                    </DockPanel>
+                    <DockPanel Margin="0,3">
+                        <TextBlock Text="Report latency" Style="{StaticResource SecondaryText}" DockPanel.Dock="Left"/>
+                        <TextBlock Text="{Binding ReportLatencyMs, StringFormat='{}{0:0.00} ms'}" Style="{StaticResource BodyText}" HorizontalAlignment="Right"/>
+                    </DockPanel>
+                    <DockPanel Margin="0,3">
+                        <TextBlock Text="Polling rate" Style="{StaticResource SecondaryText}" DockPanel.Dock="Left"/>
+                        <TextBlock Text="{Binding PollingRateHz, StringFormat='{}{0:0} Hz'}" Style="{StaticResource BodyText}" HorizontalAlignment="Right"/>
+                    </DockPanel>
+                    <DockPanel Margin="0,3">
+                        <TextBlock Text="Effective rate" Style="{StaticResource SecondaryText}" DockPanel.Dock="Left"
+                                   ToolTip="What the device actually delivered, vs the nominal rate it's configured for."/>
+                        <TextBlock Text="{Binding EffectivePollingRateHz, StringFormat='{}{0:0} Hz'}" Style="{StaticResource BodyText}" HorizontalAlignment="Right"/>
+                    </DockPanel>
+                    <DockPanel Margin="0,3">
+                        <TextBlock Text="Late reports" Style="{StaticResource SecondaryText}" DockPanel.Dock="Left"
+                                   ToolTip="Reports that arrived later than the device's own cadence. Idle pauses are excluded."/>
+                        <TextBlock Text="{Binding LateReportPercent, StringFormat='{}{0:0.0} %'}" Style="{StaticResource BodyText}" HorizontalAlignment="Right"/>
+                    </DockPanel>
+                    <DockPanel Margin="0,3">
+                        <TextBlock Text="Samples" Style="{StaticResource SecondaryText}" DockPanel.Dock="Left"/>
+                        <TextBlock Text="{Binding SampleCount}" Style="{StaticResource BodyText}" HorizontalAlignment="Right"/>
+                    </DockPanel>
+                </StackPanel>
+
+                <TextBlock Text="Report timing distribution" Style="{StaticResource SecondaryText}" Margin="0,14,0,6"
+                           Visibility="{Binding IntervalHistogram.Count, Converter={StaticResource ZeroToVisibleConverter}, ConverterParameter=Invert}"/>
+                <ItemsControl ItemsSource="{Binding IntervalHistogram}">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <UniformGrid Rows="1"/>
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <StackPanel Margin="0,0,6,0">
+                                <TextBlock Text="{Binding Count}" Style="{StaticResource MutedText}" HorizontalAlignment="Center"/>
+                                <!-- Fixed-height plot area with the bar bottom-aligned inside it, so every
+                                     bar shares one baseline and the labels below stay on a single line. -->
+                                <Grid Height="56" Margin="0,2,0,0">
+                                    <Border Height="{Binding Fraction, Converter={StaticResource FractionToBarHeightConverter}}"
+                                            VerticalAlignment="Bottom" CornerRadius="2"
+                                            Background="{Binding IsLate, Converter={StaticResource LateToBrushConverter}}"/>
+                                </Grid>
+                                <TextBlock Text="{Binding Label}" Style="{StaticResource MutedText}" HorizontalAlignment="Center"
+                                           TextAlignment="Center" TextWrapping="Wrap" Margin="0,4,0,0"/>
+                            </StackPanel>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+
+                <Border CornerRadius="6" Padding="10,8" Margin="0,14,0,0"
+                        Background="{Binding Comparison.Verdict, Converter={StaticResource VerdictToBrushConverter}, ConverterParameter=Background}"
+                        Visibility="{Binding Comparison, Converter={StaticResource NullToVisibleConverter}}">
+                    <TextBlock Text="{Binding Comparison.Message}" TextWrapping="Wrap"
+                               Foreground="{Binding Comparison.Verdict, Converter={StaticResource VerdictToBrushConverter}}"/>
+                </Border>
+
+                <Border CornerRadius="6" Padding="10,8" Margin="0,10,0,0" Background="{StaticResource SurfaceHoverBrush}"
+                        Visibility="{Binding DiagnosisMessage, Converter={StaticResource StringToVisibilityConverter}}">
+                    <StackPanel>
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+                            <controls:Icon Kind="Advisor" IconBrush="{StaticResource AccentBrush}" Margin="0,0,7,0"/>
+                            <TextBlock Text="What's delaying reports" Style="{StaticResource BodyText}" FontWeight="Medium"/>
+                        </StackPanel>
+                        <TextBlock Text="{Binding DiagnosisMessage}" Style="{StaticResource SecondaryText}" TextWrapping="Wrap"/>
+                    </StackPanel>
+                </Border>
+
+                <Button Content="{Binding IsSaved, Converter={StaticResource SaveLabelConverter}}"
+                        Style="{StaticResource AccentButton}" HorizontalAlignment="Left" Margin="0,14,0,0"
+                        Command="{Binding SaveResultCommand}" IsEnabled="{Binding IsSaved, Converter={StaticResource InverseBoolConverter}}"/>
+            </StackPanel>
+        </Border>
+
+        <Border Style="{StaticResource CardBorder}" DockPanel.Dock="Top" Margin="0,0,0,16">
+            <StackPanel>
+                <TextBlock Text="Saved results — one row per physical port, click to see its full history" Style="{StaticResource SecondaryText}" Margin="0,0,0,8" TextWrapping="Wrap"/>
+                <ItemsControl ItemsSource="{Binding SavedResults}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate DataType="{x:Type vm:PortHistoryGroupViewModel}">
+                            <Border BorderThickness="0,0,0,1" BorderBrush="{StaticResource BorderBrush}" Margin="0,0,0,2">
+                                <StackPanel>
+                                    <ToggleButton Style="{StaticResource RowToggleStyle}" IsChecked="{Binding IsExpanded}">
+                                        <Grid Margin="0,8">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="Auto"/>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Grid.Column="0" Text="{Binding IsExpanded, Converter={StaticResource ExpandGlyphConverter}}"
+                                                       FontFamily="Consolas" Margin="0,0,8,0" Style="{StaticResource SecondaryText}"/>
+                                            <TextBlock Grid.Column="1" Text="{Binding Best.PortLabel}" Style="{StaticResource BodyText}"
+                                                       TextTrimming="CharacterEllipsis" ToolTip="{Binding Best.PortLabel}" Margin="0,0,8,0"/>
+                                            <Border Grid.Column="2" CornerRadius="6" Padding="8,3" Margin="0,0,10,0"
+                                                    Background="{Binding Best.Rank, Converter={StaticResource RankToBrushConverter}}">
+                                                <TextBlock Text="{Binding Best.Rank, Converter={StaticResource RankLabelConverter}}" FontSize="11" FontWeight="Medium"
+                                                           Foreground="{Binding Best.Rank, Converter={StaticResource RankToBrushConverter}, ConverterParameter=Foreground}"/>
+                                            </Border>
+                                            <TextBlock Grid.Column="3" Text="{Binding Best.AverageJitterMs, StringFormat='{}{0:0.000} ms jitter'}" Style="{StaticResource SecondaryText}" Margin="0,0,10,0"/>
+                                            <TextBlock Grid.Column="4" Text="{Binding History.Count, StringFormat='{}{0} run(s)'}" Style="{StaticResource MutedText}"/>
+                                        </Grid>
+                                    </ToggleButton>
+
+                                    <ItemsControl ItemsSource="{Binding History}" Margin="20,0,0,8"
+                                                  Visibility="{Binding IsExpanded, Converter={StaticResource BoolToVisibleConverter}}">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate DataType="{x:Type models:PortRankResult}">
+                                                <Grid Margin="0,3">
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                        <ColumnDefinition Width="*"/>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                    </Grid.ColumnDefinitions>
+                                                    <TextBlock Grid.Column="0" Text="{Binding SavedAt, StringFormat='{}{0:MM/dd HH:mm:ss}'}"
+                                                               Style="{StaticResource MutedText}" Margin="0,0,10,0"/>
+                                                    <StackPanel Grid.Column="1" Orientation="Horizontal" Margin="0,0,10,0">
+                                                        <TextBlock Text="{Binding PortLabel}" Style="{StaticResource SecondaryText}"
+                                                                   TextTrimming="CharacterEllipsis" ToolTip="{Binding PortLabel}"/>
+                                                        <!-- A loaded run is expected to be worse than an idle one; without this marker the
+                                                             two are indistinguishable in the list and the numbers look inconsistent. -->
+                                                        <Border CornerRadius="4" Padding="5,1" Margin="8,0,0,0" Background="{StaticResource WarningBgBrush}"
+                                                                Visibility="{Binding UnderLoad, Converter={StaticResource BoolToVisibleConverter}}">
+                                                            <TextBlock Text="under load" FontSize="10" Foreground="{StaticResource WarningBrush}"/>
+                                                        </Border>
+                                                    </StackPanel>
+                                                    <TextBlock Grid.Column="2" Text="{Binding AverageJitterMs, StringFormat='{}{0:0.000} ms'}" Style="{StaticResource SecondaryText}" Margin="0,0,10,0"/>
+                                                    <TextBlock Grid.Column="3" Text="{Binding PollingRateHz, StringFormat='{}{0} Hz'}" Style="{StaticResource SecondaryText}"/>
+                                                </Grid>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </StackPanel>
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+                <TextBlock Text="No saved results yet — run a test above and click &quot;Save result&quot;."
+                           Style="{StaticResource MutedText}" TextWrapping="Wrap"
+                           Visibility="{Binding SavedResults.Count, Converter={StaticResource ZeroToVisibleConverter}}"/>
+            </StackPanel>
+        </Border>
+
+        <Border Style="{StaticResource CardBorder}" DockPanel.Dock="Top">
+            <StackPanel>
+                <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                    <controls:Icon Kind="Advisor" IconBrush="{StaticResource AccentBrush}" Margin="0,0,7,0"/>
+                    <TextBlock Text="Advisor — best port so far" Style="{StaticResource BodyText}" FontWeight="Medium"/>
+                </StackPanel>
+                <TextBlock Text="{Binding AdvisorMessage}" Style="{StaticResource SecondaryText}" TextWrapping="Wrap"/>
+            </StackPanel>
+        </Border>
+    </DockPanel>
+</UserControl>

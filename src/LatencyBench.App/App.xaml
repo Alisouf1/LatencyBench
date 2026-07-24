@@ -1,0 +1,43 @@
+﻿<Application x:Class="LatencyBench.App.App"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:local="clr-namespace:LatencyBench.App"
+             xmlns:conv="clr-namespace:LatencyBench.App.Converters"
+             StartupUri="MainWindow.xaml">
+    <Application.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="Themes/AppTheme.xaml"/>
+            </ResourceDictionary.MergedDictionaries>
+            <BooleanToVisibilityConverter x:Key="BoolToVisibleConverter"/>
+            <conv:InverseBooleanToVisibilityConverter x:Key="InverseBoolToVisibleConverter"/>
+            <conv:ZeroToVisibleConverter x:Key="ZeroToVisibleConverter"/>
+            <conv:StringToVisibilityConverter x:Key="StringToVisibilityConverter"/>
+            <conv:EnumToBooleanConverter x:Key="EnumToBooleanConverter"/>
+            <conv:RankToBrushConverter x:Key="RankToBrushConverter"/>
+            <conv:RankLabelConverter x:Key="RankLabelConverter"/>
+            <conv:TweakStateToBrushConverter x:Key="TweakStateToBrushConverter"/>
+            <conv:InverseBoolConverter x:Key="InverseBoolConverter"/>
+            <conv:TestingLabelConverter x:Key="TestingLabelConverter"/>
+            <conv:NullToVisibleConverter x:Key="NullToVisibleConverter"/>
+            <conv:DurationToBarHeightConverter x:Key="DurationToBarHeightConverter"/>
+            <conv:TracingLabelConverter x:Key="TracingLabelConverter"/>
+            <conv:TracingStatusConverter x:Key="TracingStatusConverter"/>
+            <conv:IntervalToBarHeightConverter x:Key="IntervalToBarHeightConverter"/>
+            <conv:DescendantDeviceNamesConverter x:Key="DescendantDeviceNamesConverter"/>
+            <conv:IntervalsToPolylinePointsConverter x:Key="IntervalsToPolylinePointsConverter"/>
+            <conv:UsageToBrushConverter x:Key="UsageToBrushConverter"/>
+            <conv:MicrosecondsToSeverityBrushConverter x:Key="MicrosecondsToSeverityBrushConverter"/>
+            <conv:SaveLabelConverter x:Key="SaveLabelConverter"/>
+            <conv:SaveTraceLabelConverter x:Key="SaveTraceLabelConverter"/>
+            <conv:ExpandGlyphConverter x:Key="ExpandGlyphConverter"/>
+            <conv:VerdictToBrushConverter x:Key="VerdictToBrushConverter"/>
+            <conv:FractionToBarHeightConverter x:Key="FractionToBarHeightConverter"/>
+            <conv:LateToBrushConverter x:Key="LateToBrushConverter"/>
+            <conv:MsiStateConverter x:Key="MsiStateConverter"/>
+            <conv:MsiToggleLabelConverter x:Key="MsiToggleLabelConverter"/>
+            <conv:FindingSeverityToBrushConverter x:Key="FindingSeverityToBrushConverter"/>
+            <conv:ChartPointsToPolylinePointsConverter x:Key="ChartPointsToPolylinePointsConverter"/>
+        </ResourceDictionary>
+    </Application.Resources>
+</Application>

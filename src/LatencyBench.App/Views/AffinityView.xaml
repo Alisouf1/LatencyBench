@@ -1,0 +1,93 @@
+<UserControl x:Class="LatencyBench.App.Views.AffinityView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="clr-namespace:LatencyBench.App.ViewModels"
+             xmlns:controls="clr-namespace:LatencyBench.App.Controls"
+             d:DataContext="{d:DesignInstance Type=vm:AffinityViewModel}"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008/design"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" mc:Ignorable="d">
+    <DockPanel Margin="24">
+        <DockPanel DockPanel.Dock="Top" Margin="0,0,0,4" LastChildFill="False">
+            <StackPanel DockPanel.Dock="Left" Orientation="Horizontal" VerticalAlignment="Center">
+                <controls:Icon Kind="Affinity" IconBrush="{StaticResource TextPrimaryBrush}" Width="16" Height="16" Margin="0,0,8,0"/>
+                <TextBlock Text="Core affinity" Style="{StaticResource HeadingText}"/>
+            </StackPanel>
+            <Button Content="Optimize all" Style="{StaticResource AccentButton}" DockPanel.Dock="Right" Margin="0,0,8,0"
+                    Command="{Binding OptimizeAllCommand}" IsEnabled="{Binding IsLoading, Converter={StaticResource InverseBoolConverter}}"
+                    ToolTip="Pins every controller, GPU, storage controller, and audio device below to its own core in one go. Uses the latest DPC/ISR trace when available; otherwise spreads them evenly across cores. Deterministic — clicking again gives the same result."/>
+            <Button Content="Refresh" Style="{StaticResource AppButton}" DockPanel.Dock="Right" Margin="0,0,8,0"
+                    Command="{Binding RefreshCommand}" IsEnabled="{Binding IsLoading, Converter={StaticResource InverseBoolConverter}}"/>
+            <Button Content="Restart all" Style="{StaticResource AppButton}" DockPanel.Dock="Right" Margin="0,0,8,0"
+                    Command="{Binding RestartAllCommand}" IsEnabled="{Binding IsLoading, Converter={StaticResource InverseBoolConverter}}"
+                    ToolTip="Restarts every device here whose category is safe to restart live (USB controllers, network, audio, and GPU — GPU still asks to confirm). Storage controllers are never restarted live; they need a reboot."/>
+            <Button Content="Apply all" Style="{StaticResource AppButton}" DockPanel.Dock="Right" Margin="0,0,8,0"
+                    Command="{Binding ApplyAllCommand}" IsEnabled="{Binding IsLoading, Converter={StaticResource InverseBoolConverter}}"
+                    ToolTip="Saves whatever cores are currently selected on every card below, in one click — same as clicking Apply on each one individually. Cards you haven't touched are left alone."/>
+        </DockPanel>
+        <TextBlock DockPanel.Dock="Top" Text="Choose which CPU cores handle interrupts for each USB host controller, GPU, storage controller, and audio device. Changes take effect after you restart the device (or reboot)."
+                   Style="{StaticResource SecondaryText}" TextWrapping="Wrap" Margin="0,0,0,16"/>
+
+        <TextBlock DockPanel.Dock="Top" Text="{Binding ErrorMessage}" Style="{StaticResource SecondaryText}"
+                   Foreground="{StaticResource DangerBrush}" TextWrapping="Wrap" Margin="0,0,0,12"
+                   Visibility="{Binding ErrorMessage, Converter={StaticResource StringToVisibilityConverter}}"/>
+
+        <TextBlock DockPanel.Dock="Top" Text="{Binding OptimizeStatusMessage}" Style="{StaticResource SecondaryText}"
+                   TextWrapping="Wrap" Margin="0,0,0,12"
+                   Visibility="{Binding OptimizeStatusMessage, Converter={StaticResource StringToVisibilityConverter}}"/>
+
+        <!-- No inner ScrollViewer here on purpose: MainWindow.xaml already wraps the whole tab content
+             in one outer ScrollViewer. Nesting a second one inside this DockPanel used to receive
+             infinite available height from that outer one, so it never needed to scroll internally —
+             and WPF's ScrollViewer marks the mouse wheel event handled even when it has nothing to
+             scroll, which silently swallowed the wheel input before the outer ScrollViewer ever saw
+             it. Net effect: scrolling did nothing at all. Letting the outer ScrollViewer own scrolling
+             for the whole tab (header included) is what actually works. -->
+        <ItemsControl ItemsSource="{Binding Controllers}">
+            <ItemsControl.ItemTemplate>
+                <DataTemplate DataType="{x:Type vm:HostControllerViewModel}">
+                    <Border Style="{StaticResource CardBorder}" Margin="0,0,0,12">
+                        <StackPanel>
+                            <TextBlock Text="{Binding AttachedDevicesSummary}" Style="{StaticResource BodyText}" FontWeight="Medium"
+                                       TextWrapping="Wrap" ToolTip="{Binding FriendlyName}"/>
+                            <TextBlock Text="{Binding ControllerLabel}" Style="{StaticResource MutedText}" Margin="0,2,0,0"/>
+                            <TextBlock Text="{Binding PolicySummary}" Style="{StaticResource SecondaryText}" Margin="0,4,0,10"/>
+
+                            <ItemsControl ItemsSource="{Binding Cores}">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <WrapPanel/>
+                                    </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate DataType="{x:Type vm:CoreToggleViewModel}">
+                                        <StackPanel Margin="0,0,6,6" HorizontalAlignment="Center" ToolTip="{Binding DeviceHint}">
+                                            <ToggleButton Content="{Binding Label}" IsChecked="{Binding IsSelected}" Style="{StaticResource CoreToggleStyle}"/>
+                                            <TextBlock Text="{Binding UsagePercent, StringFormat='{}{0:0}%'}" FontSize="10" HorizontalAlignment="Center" Margin="0,2,0,0"
+                                                       Foreground="{Binding UsagePercent, Converter={StaticResource UsageToBrushConverter}}"/>
+                                        </StackPanel>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+
+                            <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
+                                <controls:Icon Kind="Advisor" IconBrush="{StaticResource AccentBrush}" Width="13" Height="13" Margin="0,1,6,0"/>
+                                <TextBlock Text="{Binding CoreAdvice}" Style="{StaticResource SecondaryText}" TextWrapping="Wrap"/>
+                            </StackPanel>
+
+                            <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
+                                <Button Content="Apply" Style="{StaticResource AccentButton}" Command="{Binding ApplyCommand}"/>
+                                <Button Content="Reset to default" Style="{StaticResource AppButton}" Command="{Binding ClearOverrideCommand}" Margin="8,0,0,0"/>
+                                <Button Content="Restart device" Style="{StaticResource AppButton}" Command="{Binding RestartCommand}" Margin="8,0,0,0"
+                                        ToolTip="Restarts this controller so the core change takes effect now, instead of waiting for a reboot. Attached devices will drop out briefly."
+                                        Visibility="{Binding CanRestart, Converter={StaticResource BoolToVisibleConverter}}"/>
+                            </StackPanel>
+
+                            <TextBlock Text="{Binding StatusMessage}" Style="{StaticResource MutedText}" Margin="0,8,0,0" TextWrapping="Wrap"
+                                       Visibility="{Binding StatusMessage, Converter={StaticResource StringToVisibilityConverter}}"/>
+                        </StackPanel>
+                    </Border>
+                </DataTemplate>
+            </ItemsControl.ItemTemplate>
+        </ItemsControl>
+    </DockPanel>
+</UserControl>

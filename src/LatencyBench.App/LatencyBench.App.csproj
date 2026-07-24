@@ -1,0 +1,27 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\LatencyBench.Core\LatencyBench.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <PlatformTarget>x64</PlatformTarget>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UseWPF>true</UseWPF>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <!-- Display metadata only (shown in Explorer's file Properties / taskbar tooltip) — deliberately
+         NOT the AssemblyName, project filename, or C# namespace, all of which stay LatencyBench.* so this
+         rename touches nothing the source code depends on. -->
+    <AssemblyTitle>LatencyBench</AssemblyTitle>
+    <Product>LatencyBench by Alisouf</Product>
+    <Company>Alisouf</Company>
+  </PropertyGroup>
+
+</Project>
