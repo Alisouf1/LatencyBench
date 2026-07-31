@@ -14,9 +14,13 @@ using LatencyBench.Core.UsbTree;
 
 namespace LatencyBench.Core.Tweaks;
 
-public sealed class TweakCatalog
+/// <summary>
+/// Virtual and non-sealed so a test can substitute a catalog of tweaks that record what happened
+/// instead of writing to the registry. Every other consumer uses the real list.
+/// </summary>
+public class TweakCatalog
 {
-	public IReadOnlyList<ITweak> BuildAll()
+	public virtual IReadOnlyList<ITweak> BuildAll()
 	{
 		PowerCfgRunner powerCfg = new PowerCfgRunner();
 		TweakBackupStore backupStore = new TweakBackupStore();

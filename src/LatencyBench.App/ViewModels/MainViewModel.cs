@@ -47,6 +47,8 @@ public sealed partial class MainViewModel : ObservableObject
     /// </summary>
     public RecommendationService Recommendations { get; }
 
+    public OptimizeViewModel Optimize { get; }
+
     [ObservableProperty]
     private NavSection _currentSection = NavSection.Dashboard;
 
@@ -68,15 +70,21 @@ public sealed partial class MainViewModel : ObservableObject
         var treeEnumerator = new UsbTreeEnumerator();
         var historyStore = new PortTestHistoryStore();
         var restartService = new DeviceRestartService();
+        var interruptDeviceService = new InterruptDeviceService();
+        var affinityService = new InterruptAffinityService(treeEnumerator);
+        var traceHistory = new DpcIsrHistoryStore();
 
-        MsiMode = new MsiModeViewModel(new InterruptDeviceService(), restartService, new InterruptDeviceEnumerator(), treeEnumerator);
-        Affinity = new AffinityViewModel(new InterruptAffinityService(treeEnumerator), restartService, treeEnumerator, new InterruptDeviceEnumerator());
+        MsiMode = new MsiModeViewModel(interruptDeviceService, restartService, new InterruptDeviceEnumerator(), treeEnumerator);
+        Affinity = new AffinityViewModel(affinityService, restartService, treeEnumerator, new InterruptDeviceEnumerator());
         Tweaks = new TweaksViewModel(new TweakCatalog(), new RestorePointService());
         PortTest = new PortTestViewModel(historyStore, treeEnumerator);
-        DpcIsr = new DpcIsrViewModel(new DpcIsrHistoryStore(), new InterruptDeviceEnumerator());
+        DpcIsr = new DpcIsrViewModel(traceHistory, new InterruptDeviceEnumerator());
         MouseTest = new MouseTestViewModel(new MouseTestHistoryStore(), treeEnumerator);
         Dashboard = new DashboardViewModel(Affinity, DpcIsr, MsiMode, historyStore, treeEnumerator);
         Recommendations = new RecommendationService(SystemProfiler);
+        // Shares the same trace history the DPC/ISR tab writes to, so a trace saved there immediately
+        // becomes evidence the analysis can use rather than a separate copy that never updates.
+        Optimize = new OptimizeViewModel(Recommendations, traceHistory, affinityService, interruptDeviceService);
         CurrentViewModel = Dashboard;
 
         Affinity.LoadIfNeeded();
@@ -211,6 +219,7 @@ public sealed partial class MainViewModel : ObservableObject
         CurrentViewModel = value switch
         {
             NavSection.Dashboard => Dashboard,
+            NavSection.Optimize => Optimize,
             NavSection.PortTest => PortTest,
             NavSection.DpcIsr => DpcIsr,
             NavSection.MsiMode => MsiMode,
@@ -245,6 +254,10 @@ public sealed partial class MainViewModel : ObservableObject
         else if (value == NavSection.Tweaks)
         {
             Tweaks.LoadIfNeeded();
+        }
+        else if (value == NavSection.Optimize)
+        {
+            Optimize.LoadIfNeeded();
         }
         else if (value == NavSection.PortTest)
         {

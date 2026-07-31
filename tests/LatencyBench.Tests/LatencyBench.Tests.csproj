@@ -9,6 +9,11 @@
 
     <IsPackable>false</IsPackable>
     <IsTestProject>true</IsTestProject>
+
+    <!-- The view smoke tests instantiate real WPF controls. XAML is parsed at runtime, so a missing
+         StaticResource, a bad DataTemplate or a mistyped converter key compiles cleanly and only
+         fails when the tab is opened — which is exactly the class of bug these tests catch. -->
+    <UseWPF>true</UseWPF>
   </PropertyGroup>
 
   <ItemGroup>
@@ -24,6 +29,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\LatencyBench.Core\LatencyBench.Core.csproj" />
+    <ProjectReference Include="..\..\src\LatencyBench.App\LatencyBench.App.csproj" />
   </ItemGroup>
 
 </Project>

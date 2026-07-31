@@ -3,9 +3,13 @@ using System.Management;
 
 namespace LatencyBench.Core.Tweaks;
 
-public sealed class RestorePointService
+/// <summary>
+/// Virtual and non-sealed so a test can run the optimisation flow without asking Windows to take a
+/// real System Restore snapshot, which is slow and rate-limited.
+/// </summary>
+public class RestorePointService
 {
-	public (bool Success, string Message) CreateRestorePoint(string description)
+	public virtual (bool Success, string Message) CreateRestorePoint(string description)
 	{
 		try
 		{

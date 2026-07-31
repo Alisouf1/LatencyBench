@@ -17,6 +17,9 @@
         <DataTemplate DataType="{x:Type vm:DashboardViewModel}">
             <views:DashboardView/>
         </DataTemplate>
+        <DataTemplate DataType="{x:Type vm:OptimizeViewModel}">
+            <views:OptimizeView/>
+        </DataTemplate>
         <DataTemplate DataType="{x:Type vm:MsiModeViewModel}">
             <views:MsiModeView/>
         </DataTemplate>
@@ -71,6 +74,13 @@
                         <StackPanel Orientation="Horizontal">
                             <controls:Icon Kind="Dashboard" IconBrush="{Binding Foreground, RelativeSource={RelativeSource AncestorType=RadioButton}}" Width="13" Height="13" Margin="0,0,6,0"/>
                             <TextBlock Text="Dashboard"/>
+                        </StackPanel>
+                    </RadioButton>
+                    <RadioButton GroupName="Nav" Style="{StaticResource NavButtonStyle}"
+                                 IsChecked="{Binding CurrentSection, Converter={StaticResource EnumToBooleanConverter}, ConverterParameter=Optimize}">
+                        <StackPanel Orientation="Horizontal">
+                            <controls:Icon Kind="Advisor" IconBrush="{Binding Foreground, RelativeSource={RelativeSource AncestorType=RadioButton}}" Width="13" Height="13" Margin="0,0,6,0"/>
+                            <TextBlock Text="Optimize"/>
                         </StackPanel>
                     </RadioButton>
                     <RadioButton GroupName="Nav" Style="{StaticResource NavButtonStyle}"

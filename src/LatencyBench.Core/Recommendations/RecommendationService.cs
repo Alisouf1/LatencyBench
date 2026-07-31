@@ -24,7 +24,12 @@ namespace LatencyBench.Core.Recommendations;
 /// is the machine the tests run on.
 /// </para>
 /// </summary>
-public sealed class RecommendationService
+/// <remarks>
+/// Non-sealed with a virtual entry point so a test can supply a report describing a machine that
+/// needs work. Without that seam the view tests could only ever render an empty plan on a
+/// development machine that is already tuned, which is exactly the case where nothing gets checked.
+/// </remarks>
+public class RecommendationService
 {
 	private readonly SystemProfiler _profiler;
 	private readonly TweakCatalog _tweakCatalog;
@@ -48,7 +53,7 @@ public sealed class RecommendationService
 	/// tweak state alone launches a process for the storage checks and opens a service handle, and
 	/// device enumeration walks the whole tree.
 	/// </summary>
-	public async Task<RecommendationReport> AnalyzeAsync(
+	public virtual async Task<RecommendationReport> AnalyzeAsync(
 		IReadOnlyList<DpcIsrTestResult>? traces = null,
 		CancellationToken cancellationToken = default)
 	{
