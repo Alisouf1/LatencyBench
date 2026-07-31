@@ -31,7 +31,7 @@ public static class UsbDeviceNodeExtensions
 	{
 		List<UsbDeviceNode> subtree = new List<UsbDeviceNode> { node };
 		Collect(node);
-		string text = subtree.Select((UsbDeviceNode n) => n.FriendlyName).FirstOrDefault((string n) => !n.StartsWith("HID", StringComparison.OrdinalIgnoreCase) && !n.StartsWith("USB ", StringComparison.OrdinalIgnoreCase) && !n.Contains("compliant", StringComparison.OrdinalIgnoreCase) && !n.Contains("VID_", StringComparison.OrdinalIgnoreCase));
+		string? text = subtree.Select((UsbDeviceNode n) => n.FriendlyName).FirstOrDefault((string n) => !n.StartsWith("HID", StringComparison.OrdinalIgnoreCase) && !n.StartsWith("USB ", StringComparison.OrdinalIgnoreCase) && !n.Contains("compliant", StringComparison.OrdinalIgnoreCase) && !n.Contains("VID_", StringComparison.OrdinalIgnoreCase));
 		if (text != null)
 		{
 			return text;

@@ -67,19 +67,13 @@ public sealed class NagleAlgorithmTweak : ITweak
 
 	private static bool IsApplied(string keyPath)
 	{
-		using RegistryKey registryKey = Registry.LocalMachine.OpenSubKey(keyPath);
-		object obj = registryKey?.GetValue("TcpAckFrequency");
-		int result;
-		if (obj is int && (int)obj == 1)
+		using RegistryKey? registryKey = Registry.LocalMachine.OpenSubKey(keyPath);
+		if (registryKey is null)
 		{
-			obj = registryKey.GetValue("TCPNoDelay");
-			result = ((obj is int && (int)obj == 1) ? 1 : 0);
+			return false;
 		}
-		else
-		{
-			result = 0;
-		}
-		return (byte)result != 0;
+
+		return registryKey.GetValue("TcpAckFrequency") is 1 && registryKey.GetValue("TCPNoDelay") is 1;
 	}
 
 	private void StashIfPresent(RegistryKey key, string keyPath, string valueName)
@@ -96,7 +90,7 @@ public sealed class NagleAlgorithmTweak : ITweak
 
 	private void RestoreOrRemove(RegistryKey key, string keyPath, string valueName)
 	{
-		string text = _backupStore.TryGet(BackupKey(keyPath, valueName));
+		string? text = _backupStore.TryGet(BackupKey(keyPath, valueName));
 		int result;
 		if ((text == null || text == "absent") ? true : false)
 		{

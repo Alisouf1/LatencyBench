@@ -27,7 +27,7 @@ public sealed class RawInputCapture
 		string b = StripInterfaceGuid(devicePath);
 		foreach (nint item in RawInputApi.ListDeviceHandles())
 		{
-			string deviceName = RawInputApi.GetDeviceName(item);
+			string? deviceName = RawInputApi.GetDeviceName(item);
 			if (deviceName != null && string.Equals(StripInterfaceGuid(deviceName), b, StringComparison.OrdinalIgnoreCase))
 			{
 				return item;

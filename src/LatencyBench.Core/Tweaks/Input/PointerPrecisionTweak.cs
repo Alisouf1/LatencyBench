@@ -34,7 +34,7 @@ public sealed class PointerPrecisionTweak : ITweak
 
 	public TweakState GetState()
 	{
-		RegistryKey key = Registry.CurrentUser.OpenSubKey("Control Panel\\Mouse");
+		RegistryKey? key = Registry.CurrentUser.OpenSubKey("Control Panel\\Mouse");
 		try
 		{
 			if (key == null)

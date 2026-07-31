@@ -40,7 +40,7 @@ public sealed class UsbTreeEnumerator
 			{
 				if (CfgMgr32.CM_Get_Parent(out var pdnDevInst, item, 0u) != 0 || !hashSet.Contains(pdnDevInst))
 				{
-					UsbDeviceNode usbDeviceNode = BuildNode(item, null, hubDevicePaths, isHostController: true);
+					UsbDeviceNode? usbDeviceNode = BuildNode(item, null, hubDevicePaths, isHostController: true);
 					if (usbDeviceNode != null)
 					{
 						list.Add(usbDeviceNode);
@@ -57,23 +57,23 @@ public sealed class UsbTreeEnumerator
 
 	private static string? Clean(string? name)
 	{
-		string text = name?.Trim();
+		string? text = name?.Trim();
 		return string.IsNullOrEmpty(text) ? null : text;
 	}
 
 	private UsbDeviceNode? BuildNode(uint devInst, int? portNumber, Dictionary<uint, string> hubDevicePaths, bool isHostController)
 	{
-		string deviceId = CfgMgr32.GetDeviceId(devInst);
+		string? deviceId = CfgMgr32.GetDeviceId(devInst);
 		if (deviceId == null)
 		{
 			return null;
 		}
 		string friendlyName = Clean((!isHostController) ? CfgMgr32.GetBusReportedDeviceDesc(devInst) : null) ?? Clean(CfgMgr32.GetStringProperty(devInst, 13u)) ?? Clean(CfgMgr32.GetStringProperty(devInst, 1u)) ?? deviceId;
-		string stringProperty = CfgMgr32.GetStringProperty(devInst, 8u);
+		string? stringProperty = CfgMgr32.GetStringProperty(devInst, 8u);
 		bool isWorking = CfgMgr32.IsStarted(devInst);
 		bool isHub = !isHostController && hubDevicePaths.ContainsKey(devInst);
-		string vendorId = null;
-		string productId = null;
+		string? vendorId = null;
+		string? productId = null;
 		Match match = VidPidPattern.Match(deviceId);
 		if (match.Success)
 		{
@@ -87,7 +87,7 @@ public sealed class UsbTreeEnumerator
 		if (portNumber.HasValue)
 		{
 			int valueOrDefault = portNumber.GetValueOrDefault();
-			if (CfgMgr32.CM_Get_Parent(out var pdnDevInst, devInst, 0u) == 0 && hubDevicePaths.TryGetValue(pdnDevInst, out string value))
+			if (CfgMgr32.CM_Get_Parent(out var pdnDevInst, devInst, 0u) == 0 && hubDevicePaths.TryGetValue(pdnDevInst, out string? value))
 			{
 				speed = UsbIoctl.TryGetSpeed(value, valueOrDefault);
 			}
@@ -118,7 +118,7 @@ public sealed class UsbTreeEnumerator
 		while (true)
 		{
 			int? dwordProperty = CfgMgr32.GetDwordProperty(num, 29u);
-			UsbDeviceNode usbDeviceNode = BuildNode(num, dwordProperty, hubDevicePaths, isHostController: false);
+			UsbDeviceNode? usbDeviceNode = BuildNode(num, dwordProperty, hubDevicePaths, isHostController: false);
 			if (usbDeviceNode != null)
 			{
 				parent.Children.Add(usbDeviceNode);

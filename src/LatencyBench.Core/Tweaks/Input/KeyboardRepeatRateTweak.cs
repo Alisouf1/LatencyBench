@@ -33,7 +33,7 @@ public sealed class KeyboardRepeatRateTweak : ITweak
 
 	public TweakState GetState()
 	{
-		RegistryKey key = Registry.CurrentUser.OpenSubKey("Control Panel\\Keyboard");
+		RegistryKey? key = Registry.CurrentUser.OpenSubKey("Control Panel\\Keyboard");
 		try
 		{
 			if (key == null)

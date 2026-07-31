@@ -26,14 +26,14 @@ public sealed class DevicePowerManagementTweak : ITweak
 
 	public TweakState GetState()
 	{
-		List<bool?> list = (from v in _instanceIdsProvider().Select(ReadEnable)
+		List<bool> list = (from v in _instanceIdsProvider().Select(ReadEnable)
 			where v.HasValue
-			select v).ToList();
+			select v.Value).ToList();
 		if (list.Count == 0)
 		{
 			return TweakState.Unknown;
 		}
-		return (!list.All((bool? v) => !v.Value)) ? TweakState.NotApplied : TweakState.Applied;
+		return (!list.All((bool v) => !v)) ? TweakState.NotApplied : TweakState.Applied;
 	}
 
 	public void Apply()
@@ -64,7 +64,7 @@ public sealed class DevicePowerManagementTweak : ITweak
 	{
 		foreach (string item in _instanceIdsProvider())
 		{
-			string text = _backupStore.TryGet(BackupKey(item));
+			string? text = _backupStore.TryGet(BackupKey(item));
 			bool value = text == null || bool.Parse(text);
 			WriteEnable(item, value);
 			_backupStore.Remove(BackupKey(item));
@@ -78,20 +78,20 @@ public sealed class DevicePowerManagementTweak : ITweak
 
 	private static bool? ReadEnable(string instanceId)
 	{
-		ManagementObject managementObject = FindManagementObject(instanceId);
+		ManagementObject? managementObject = FindManagementObject(instanceId);
 		try
 		{
 			return managementObject?["Enable"] as bool?;
 		}
 		finally
 		{
-			((IDisposable)managementObject)?.Dispose();
+			managementObject?.Dispose();
 		}
 	}
 
 	private static void WriteEnable(string instanceId, bool value)
 	{
-		ManagementObject managementObject = FindManagementObject(instanceId);
+		ManagementObject? managementObject = FindManagementObject(instanceId);
 		try
 		{
 			if (managementObject != null)
@@ -102,7 +102,7 @@ public sealed class DevicePowerManagementTweak : ITweak
 		}
 		finally
 		{
-			((IDisposable)managementObject)?.Dispose();
+			managementObject?.Dispose();
 		}
 	}
 

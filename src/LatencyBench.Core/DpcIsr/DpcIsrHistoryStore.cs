@@ -17,7 +17,11 @@ public sealed class DpcIsrHistoryStore
 		if (filePath != null)
 		{
 			_filePath = filePath;
-			Directory.CreateDirectory(Path.GetDirectoryName(filePath));
+			var directory = Path.GetDirectoryName(filePath);
+			if (!string.IsNullOrEmpty(directory))
+			{
+				Directory.CreateDirectory(directory);
+			}
 		}
 		else
 		{
@@ -48,7 +52,7 @@ public sealed class DpcIsrHistoryStore
 		}
 		try
 		{
-			List<DpcIsrTestResult> list = JsonSerializer.Deserialize<List<DpcIsrTestResult>>(File.ReadAllText(_filePath));
+			List<DpcIsrTestResult>? list = JsonSerializer.Deserialize<List<DpcIsrTestResult>>(File.ReadAllText(_filePath));
 			if (list == null)
 			{
 				return;

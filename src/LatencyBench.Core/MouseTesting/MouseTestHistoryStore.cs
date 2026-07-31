@@ -18,7 +18,11 @@ public sealed class MouseTestHistoryStore
 		if (filePath != null)
 		{
 			_filePath = filePath;
-			Directory.CreateDirectory(Path.GetDirectoryName(filePath));
+			var directory = Path.GetDirectoryName(filePath);
+			if (!string.IsNullOrEmpty(directory))
+			{
+				Directory.CreateDirectory(directory);
+			}
 		}
 		else
 		{
@@ -49,7 +53,7 @@ public sealed class MouseTestHistoryStore
 		}
 		try
 		{
-			List<MouseTestSession> list = JsonSerializer.Deserialize<List<MouseTestSession>>(File.ReadAllText(_filePath));
+			List<MouseTestSession>? list = JsonSerializer.Deserialize<List<MouseTestSession>>(File.ReadAllText(_filePath));
 			if (list == null)
 			{
 				return;

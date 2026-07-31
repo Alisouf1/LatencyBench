@@ -93,7 +93,7 @@ internal static class SetupApi
 						Marshal.WriteInt32(num3, (IntPtr.Size == 8) ? 8 : (4 + Marshal.SystemDefaultCharSize));
 						if (SetupDiGetDeviceInterfaceDetail(num, ref deviceInterfaceData, num3, requiredSize, out var _, ref deviceInfoData))
 						{
-							string text = Marshal.PtrToStringUni(num3 + 4);
+							string? text = Marshal.PtrToStringUni(num3 + 4);
 							if (text != null)
 							{
 								dictionary[deviceInfoData.DevInst] = text;

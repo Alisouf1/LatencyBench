@@ -17,7 +17,8 @@ public sealed class HidTestResult
 
 	public required double JitterMs { get; init; }
 
-	public required double ReportLatencyMs { get; init; }
+	/// <summary>Median time between consecutive received reports — a report-spacing measurement, not end-to-end input latency (there is no independent physical-event timestamp to measure that against).</summary>
+	public required double MedianReportIntervalMs { get; init; }
 
 	public required double EffectivePollingRateHz { get; init; }
 

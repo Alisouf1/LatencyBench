@@ -16,11 +16,11 @@ public sealed class HidDeviceEnumerator
 			item.Deconstruct(out var key, out var value);
 			uint devInst = key;
 			string devicePath = value;
-			string deviceId = CfgMgr32.GetDeviceId(devInst);
+			string? deviceId = CfgMgr32.GetDeviceId(devInst);
 			if (deviceId != null)
 			{
 				string friendlyName = CfgMgr32.GetStringProperty(devInst, 13u) ?? CfgMgr32.GetStringProperty(devInst, 1u) ?? deviceId;
-				string stringProperty = CfgMgr32.GetStringProperty(devInst, 8u);
+				string? stringProperty = CfgMgr32.GetStringProperty(devInst, 8u);
 				(ushort, ushort)? tuple = HidApi.TryGetUsage(devicePath);
 				list.Add(new HidDeviceInfo
 				{
