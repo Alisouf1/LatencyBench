@@ -136,6 +136,7 @@ public sealed class SystemProfiler
 			AudioDevices = audio,
 			UsbControllers = usb,
 			NetworkAdapters = network,
+			HasBattery = Probe(warnings, "battery presence", ReadHasBattery, () => false),
 			CapturedAt = DateTimeOffset.UtcNow,
 			Warnings = warnings
 		};
@@ -224,6 +225,20 @@ public sealed class SystemProfiler
 			AvailablePhysicalBytes = status.ullAvailPhys,
 			LoadPercent = status.dwMemoryLoad
 		};
+	}
+
+	private static bool ReadHasBattery()
+	{
+		if (!SystemInfoApi.GetSystemPowerStatus(out SystemInfoApi.SYSTEM_POWER_STATUS status))
+		{
+			return false;
+		}
+
+		// An unknown flag is treated as "no battery" rather than "maybe": the consequence of a false
+		// negative is a desktop-oriented recommendation on an unidentifiable machine, whereas a false
+		// positive suppresses good advice on every desktop whose firmware reports oddly.
+		return status.BatteryFlag != SystemInfoApi.BatteryFlagNoSystemBattery
+			&& status.BatteryFlag != SystemInfoApi.BatteryFlagUnknown;
 	}
 
 	private static IReadOnlyList<AudioDeviceInfo> ReadAudioDevices()

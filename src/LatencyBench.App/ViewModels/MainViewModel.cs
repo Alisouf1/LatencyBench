@@ -7,6 +7,7 @@ using LatencyBench.Core.Elevation;
 using LatencyBench.Core.Msi;
 using LatencyBench.Core.MouseTesting;
 using LatencyBench.Core.PortTesting;
+using LatencyBench.Core.Recommendations;
 using LatencyBench.Core.SystemInfo;
 using LatencyBench.Core.Tweaks;
 using LatencyBench.Core.UsbTree;
@@ -40,6 +41,12 @@ public sealed partial class MainViewModel : ObservableObject
     /// </summary>
     public SystemProfiler SystemProfiler { get; } = new();
 
+    /// <summary>
+    /// Analyses the machine and explains what is worth changing. Shares the one
+    /// <see cref="SystemProfiler"/> above rather than detecting again.
+    /// </summary>
+    public RecommendationService Recommendations { get; }
+
     [ObservableProperty]
     private NavSection _currentSection = NavSection.Dashboard;
 
@@ -69,6 +76,7 @@ public sealed partial class MainViewModel : ObservableObject
         DpcIsr = new DpcIsrViewModel(new DpcIsrHistoryStore(), new InterruptDeviceEnumerator());
         MouseTest = new MouseTestViewModel(new MouseTestHistoryStore(), treeEnumerator);
         Dashboard = new DashboardViewModel(Affinity, DpcIsr, MsiMode, historyStore, treeEnumerator);
+        Recommendations = new RecommendationService(SystemProfiler);
         CurrentViewModel = Dashboard;
 
         Affinity.LoadIfNeeded();

@@ -53,6 +53,27 @@ internal static class SystemInfoApi
 	[DllImport("ntdll.dll")]
 	internal static extern int RtlGetVersion(ref RTL_OSVERSIONINFOEXW versionInformation);
 
+	[DllImport("kernel32.dll", SetLastError = true)]
+	[return: MarshalAs(UnmanagedType.Bool)]
+	internal static extern bool GetSystemPowerStatus(out SYSTEM_POWER_STATUS status);
+
+	/// <summary>SYSTEM_POWER_STATUS.BatteryFlag — the machine has no system battery.</summary>
+	internal const byte BatteryFlagNoSystemBattery = 128;
+
+	/// <summary>SYSTEM_POWER_STATUS.BatteryFlag — status could not be determined.</summary>
+	internal const byte BatteryFlagUnknown = 255;
+
+	[StructLayout(LayoutKind.Sequential)]
+	internal struct SYSTEM_POWER_STATUS
+	{
+		internal byte ACLineStatus;
+		internal byte BatteryFlag;
+		internal byte BatteryLifePercent;
+		internal byte SystemStatusFlag;
+		internal uint BatteryLifeTime;
+		internal uint BatteryFullLifeTime;
+	}
+
 	[StructLayout(LayoutKind.Sequential)]
 	internal struct MEMORYSTATUSEX
 	{

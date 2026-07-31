@@ -143,6 +143,13 @@ public sealed class SystemProfile
 
 	public required IReadOnlyList<NetworkAdapterSummary> NetworkAdapters { get; init; }
 
+	/// <summary>
+	/// True when the machine has a system battery. Several optimisations that are unambiguously good
+	/// on a desktop — pinning the minimum processor state at 100%, keeping every core unparked — are
+	/// a straight trade of battery life and heat on a laptop, so recommendations have to know.
+	/// </summary>
+	public required bool HasBattery { get; init; }
+
 	/// <summary>When this snapshot was taken. Detection is cached, so consumers that care about
 	/// freshness can check rather than assume.</summary>
 	public required DateTimeOffset CapturedAt { get; init; }
