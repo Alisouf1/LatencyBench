@@ -33,37 +33,64 @@ public sealed class HidPortTestEngine
 
 	public bool IsCapturing { get; private set; }
 
+	/// <summary>
+	/// The report arrival times to analyse. When a combo device exposes both a mouse and a keyboard
+	/// collection, both are merged in timestamp order.
+	/// <para>
+	/// This used to return whichever of the two collections had more entries and throw the other away,
+	/// which contradicted <see cref="OnRawInputMessage"/> — that method goes out of its way to capture
+	/// both collections precisely so neither half is dropped. On a combo device the discarded
+	/// collection's reports were missing from the interval series, which inflated every gap that
+	/// spanned them and reported a polling rate below what the device was actually achieving.
+	/// </para>
+	/// </summary>
 	private IReadOnlyList<long> Timestamps
 	{
 		get
 		{
-			IReadOnlyList<long> readOnlyList2;
-			if (!_keyboardActive)
+			IReadOnlyList<long> keyboard = _keyboardActive ? _keyboardCapture.Timestamps : Array.Empty<long>();
+			IReadOnlyList<long> mouse = _mouseActive ? _rawInputCapture.Timestamps : Array.Empty<long>();
+
+			if (keyboard.Count == 0)
 			{
-				IReadOnlyList<long> readOnlyList = Array.Empty<long>();
-				readOnlyList2 = readOnlyList;
+				return mouse;
 			}
-			else
+
+			if (mouse.Count == 0)
 			{
-				readOnlyList2 = _keyboardCapture.Timestamps;
+				return keyboard;
 			}
-			IReadOnlyList<long> readOnlyList3 = readOnlyList2;
-			IReadOnlyList<long> readOnlyList4;
-			if (!_mouseActive)
+
+			// Each source is already in arrival order, so this is a linear merge, not a sort.
+			var merged = new List<long>(keyboard.Count + mouse.Count);
+			int keyboardIndex = 0;
+			int mouseIndex = 0;
+			while (keyboardIndex < keyboard.Count && mouseIndex < mouse.Count)
 			{
-				IReadOnlyList<long> readOnlyList = Array.Empty<long>();
-				readOnlyList4 = readOnlyList;
+				merged.Add(keyboard[keyboardIndex] <= mouse[mouseIndex]
+					? keyboard[keyboardIndex++]
+					: mouse[mouseIndex++]);
 			}
-			else
+
+			while (keyboardIndex < keyboard.Count)
 			{
-				readOnlyList4 = _rawInputCapture.Timestamps;
+				merged.Add(keyboard[keyboardIndex++]);
 			}
-			IReadOnlyList<long> readOnlyList5 = readOnlyList4;
-			return (readOnlyList3.Count >= readOnlyList5.Count) ? readOnlyList3 : readOnlyList5;
+
+			while (mouseIndex < mouse.Count)
+			{
+				merged.Add(mouse[mouseIndex++]);
+			}
+
+			return merged;
 		}
 	}
 
-	public int CurrentSampleCount => Timestamps.Count;
+	/// <summary>Counted from the sources directly — going through <see cref="Timestamps"/> would build
+	/// the merged list just to read its length, and this is polled by the progress timer.</summary>
+	public int CurrentSampleCount =>
+		(_keyboardActive ? _keyboardCapture.Timestamps.Count : 0)
+		+ (_mouseActive ? _rawInputCapture.Timestamps.Count : 0);
 
 	public IReadOnlyList<double> GetRecentIntervalsMs(int maxCount)
 	{
@@ -83,7 +110,10 @@ public sealed class HidPortTestEngine
 
 	public JitterLatencyAnalyzer.AnalysisResult? GetCurrentAnalysis()
 	{
-		return JitterLatencyAnalyzer.Analyze(Timestamps.ToList(), RawInputCapture.TicksPerMillisecond);
+		// Analyze only reads the sequence, so the defensive ToList() copy this used to make was pure
+		// overhead — and it ran on every live refresh, over a list that reaches tens of thousands of
+		// entries on a high-polling-rate device.
+		return JitterLatencyAnalyzer.Analyze(Timestamps, RawInputCapture.TicksPerMillisecond);
 	}
 
 	public IReadOnlyList<ReportWindow> GetReportWindows(double medianMs)
@@ -181,7 +211,7 @@ public sealed class HidPortTestEngine
 			_rawInputCapture.Stop();
 		}
 		IsCapturing = false;
-		JitterLatencyAnalyzer.AnalysisResult? analysisResult = JitterLatencyAnalyzer.Analyze(Timestamps.ToList(), RawInputCapture.TicksPerMillisecond);
+		JitterLatencyAnalyzer.AnalysisResult? analysisResult = JitterLatencyAnalyzer.Analyze(Timestamps, RawInputCapture.TicksPerMillisecond);
 		if (!analysisResult.HasValue)
 		{
 			return null;
@@ -194,7 +224,7 @@ public sealed class HidPortTestEngine
 			SampleCount = analysisResult.Value.SampleCount,
 			PollingRateHz = analysisResult.Value.PollingRateHz,
 			JitterMs = analysisResult.Value.JitterMs,
-			ReportLatencyMs = analysisResult.Value.ReportLatencyMs,
+			MedianReportIntervalMs = analysisResult.Value.MedianReportIntervalMs,
 			EffectivePollingRateHz = analysisResult.Value.EffectivePollingRateHz,
 			LateReportPercent = analysisResult.Value.LateReportPercent,
 			ActiveIntervalsMs = analysisResult.Value.ActiveIntervalsMs

@@ -27,7 +27,7 @@ public sealed class TrimEnabledTweak : ITweak
 
 	public void Apply()
 	{
-		var (num, _, text) = Run("behavior set DisableDeleteNotify 0");
+		var (num, _, text) = Run("behavior", "set", "DisableDeleteNotify", "0");
 		if (num != 0 || GetState() != TweakState.Applied)
 		{
 			throw new InvalidOperationException("Could not enable TRIM: " + text);
@@ -41,7 +41,7 @@ public sealed class TrimEnabledTweak : ITweak
 
 	private int? ReadDisableDeleteNotify()
 	{
-		var (num, text, _) = Run("behavior query DisableDeleteNotify");
+		var (num, text, _) = Run("behavior", "query", "DisableDeleteNotify");
 		if (num != 0)
 		{
 			return null;
@@ -49,19 +49,8 @@ public sealed class TrimEnabledTweak : ITweak
 		return text.Contains("= 0", StringComparison.Ordinal) ? new int?(0) : (text.Contains("= 1", StringComparison.Ordinal) ? new int?(1) : ((int?)null));
 	}
 
-	private static (int ExitCode, string StdOut, string StdErr) Run(string arguments)
+	private static (int ExitCode, string StdOut, string StdErr) Run(params string[] arguments)
 	{
-		ProcessStartInfo startInfo = new ProcessStartInfo("fsutil.exe", arguments)
-		{
-			RedirectStandardOutput = true,
-			RedirectStandardError = true,
-			UseShellExecute = false,
-			CreateNoWindow = true
-		};
-		using Process process = Process.Start(startInfo) ?? throw new InvalidOperationException("Failed to start fsutil.exe.");
-		string item = process.StandardOutput.ReadToEnd();
-		string item2 = process.StandardError.ReadToEnd();
-		process.WaitForExit();
-		return (ExitCode: process.ExitCode, StdOut: item, StdErr: item2);
+		return ConsoleToolRunner.Run("fsutil.exe", arguments);
 	}
 }

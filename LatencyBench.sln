@@ -9,6 +9,10 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "LatencyBench.App", "src\Lat
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "LatencyBench.Core", "src\LatencyBench.Core\LatencyBench.Core.csproj", "{5075394A-AE2B-4B29-8812-9AD509CA9981}"
 EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{B249F512-7EC8-4EB4-80A1-A2D07EB70360}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "LatencyBench.Tests", "tests\LatencyBench.Tests\LatencyBench.Tests.csproj", "{A5829C3B-61F9-49A9-A0D7-16389C04E7A2}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -26,9 +30,14 @@ Global
 		{5075394A-AE2B-4B29-8812-9AD509CA9981}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{5075394A-AE2B-4B29-8812-9AD509CA9981}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{5075394A-AE2B-4B29-8812-9AD509CA9981}.Release|Any CPU.Build.0 = Release|Any CPU
+		{A5829C3B-61F9-49A9-A0D7-16389C04E7A2}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{A5829C3B-61F9-49A9-A0D7-16389C04E7A2}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{A5829C3B-61F9-49A9-A0D7-16389C04E7A2}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{A5829C3B-61F9-49A9-A0D7-16389C04E7A2}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(NestedProjects) = preSolution
 		{0E5C307A-8BB1-4F8C-993D-4A8982D2401A} = {BEB990F8-04FB-40AB-AD68-72F1066743DB}
 		{5075394A-AE2B-4B29-8812-9AD509CA9981} = {BEB990F8-04FB-40AB-AD68-72F1066743DB}
+		{A5829C3B-61F9-49A9-A0D7-16389C04E7A2} = {B249F512-7EC8-4EB4-80A1-A2D07EB70360}
 	EndGlobalSection
 EndGlobal

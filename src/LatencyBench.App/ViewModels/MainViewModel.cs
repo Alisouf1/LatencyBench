@@ -7,6 +7,7 @@ using LatencyBench.Core.Elevation;
 using LatencyBench.Core.Msi;
 using LatencyBench.Core.MouseTesting;
 using LatencyBench.Core.PortTesting;
+using LatencyBench.Core.SystemInfo;
 using LatencyBench.Core.Tweaks;
 using LatencyBench.Core.UsbTree;
 
@@ -31,6 +32,13 @@ public sealed partial class MainViewModel : ObservableObject
     public TweaksViewModel Tweaks { get; }
 
     public MouseTestViewModel MouseTest { get; }
+
+    /// <summary>
+    /// The machine's hardware and Windows profile. Owned here and shared, because detection is the
+    /// input to everything that reasons about what this PC can actually benefit from, and running
+    /// it once per consumer would repeat a full device-tree enumeration each time.
+    /// </summary>
+    public SystemProfiler SystemProfiler { get; } = new();
 
     [ObservableProperty]
     private NavSection _currentSection = NavSection.Dashboard;
@@ -64,6 +72,11 @@ public sealed partial class MainViewModel : ObservableObject
         CurrentViewModel = Dashboard;
 
         Affinity.LoadIfNeeded();
+
+        // Warmed in the background so the profile is already in hand by the time anything asks for
+        // it. Fire-and-forget is correct here: SystemProfiler collects its own probe failures as
+        // warnings rather than throwing, and nothing at startup blocks on the result.
+        _ = SystemProfiler.GetAsync();
     }
 
     /// <summary>Forward WM_INPUT from the window's message hook here — safe to call regardless of which tab is active, since each underlying capture engine only records while its own test is actually running (and self-filters by device handle), so forwarding to both unconditionally never cross-contaminates a run.</summary>

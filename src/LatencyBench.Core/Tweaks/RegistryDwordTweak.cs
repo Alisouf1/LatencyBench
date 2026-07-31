@@ -53,22 +53,45 @@ public sealed class RegistryDwordTweak : ITweak
 				_backupStore.Save(BackupKey, valueOrDefault.ToString());
 			}
 		}
+		else
+		{
+			// A missing value is a distinct original state.  Remember it so Revert can
+			// remove the value instead of replacing it with an assumed Windows default.
+			_backupStore.Save(BackupKey, "absent");
+		}
 		WriteValue(_appliedValue);
 	}
 
 	public void Revert()
 	{
-		string text = _backupStore.TryGet(BackupKey);
-		int result;
-		int value = ((text != null && int.TryParse(text, out result)) ? result : _fallbackDefaultValue);
-		WriteValue(value);
+		string? text = _backupStore.TryGet(BackupKey);
+		if (text == null)
+		{
+			// The setting was already applied before LatencyBench touched it, so there
+			// is no known prior value to restore safely.
+			return;
+		}
+
+		if (text == "absent")
+		{
+			DeleteValue();
+		}
+		else if (int.TryParse(text, out int value))
+		{
+			WriteValue(value);
+		}
+		else
+		{
+			throw new InvalidOperationException($"The saved backup for '{Definition.Name}' is invalid.");
+		}
+
 		_backupStore.Remove(BackupKey);
 	}
 
 	private int? ReadCurrentValue()
 	{
 		using RegistryKey registryKey = RegistryKey.OpenBaseKey(_hive, RegistryView.Default);
-		using RegistryKey registryKey2 = registryKey.OpenSubKey(_subKeyPath);
+		using RegistryKey? registryKey2 = registryKey.OpenSubKey(_subKeyPath);
 		return (registryKey2?.GetValue(_valueName) is int value) ? new int?(value) : ((int?)null);
 	}
 
@@ -77,5 +100,12 @@ public sealed class RegistryDwordTweak : ITweak
 		using RegistryKey registryKey = RegistryKey.OpenBaseKey(_hive, RegistryView.Default);
 		using RegistryKey registryKey2 = registryKey.CreateSubKey(_subKeyPath, writable: true);
 		registryKey2.SetValue(_valueName, value, RegistryValueKind.DWord);
+	}
+
+	private void DeleteValue()
+	{
+		using RegistryKey registryKey = RegistryKey.OpenBaseKey(_hive, RegistryView.Default);
+		using RegistryKey? registryKey2 = registryKey.OpenSubKey(_subKeyPath, writable: true);
+		registryKey2?.DeleteValue(_valueName, throwOnMissingValue: false);
 	}
 }

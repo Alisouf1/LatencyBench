@@ -9,6 +9,7 @@
         xmlns:controls="clr-namespace:LatencyBench.App.Controls"
         mc:Ignorable="d"
         Title="LatencyBench — by Alisouf" Height="760" Width="1080" MinHeight="560" MinWidth="820"
+        Icon="Assets/LatencyBench.ico"
         Background="{StaticResource WindowBackgroundBrush}"
         FontFamily="Segoe UI">
 

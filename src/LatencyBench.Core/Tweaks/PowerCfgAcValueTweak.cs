@@ -19,7 +19,9 @@ public sealed class PowerCfgAcValueTweak : ITweak
 
 	public TweakDefinition Definition { get; }
 
-	private string BackupKey => "powercfg:" + _subgroupGuid + "\\" + _settingGuid;
+	private string BackupSchemeKey => "powercfg-scheme:" + _subgroupGuid + "\\" + _settingGuid;
+
+	private string BackupKey(string schemeGuid) => "powercfg:" + schemeGuid + "\\" + _subgroupGuid + "\\" + _settingGuid;
 
 	public PowerCfgAcValueTweak(TweakDefinition definition, PowerCfgRunner powerCfg, string subgroupGuid, string settingGuid, uint appliedValue, uint fallbackDefaultValue, TweakBackupStore backupStore)
 	{
@@ -44,36 +46,56 @@ public sealed class PowerCfgAcValueTweak : ITweak
 
 	public void Apply()
 	{
-		uint? num = ReadCurrentValue();
-		if (num.HasValue)
+		string schemeGuid = _powerCfg.GetActiveSchemeGuid();
+
+		// When the setting has never been overridden on this scheme there is no stored value to read
+		// back, so fall back to the documented Windows default for it. Without this the tweak applies
+		// with no backup recorded at all and Revert becomes a silent no-op.
+		uint previous = ReadCurrentValue(schemeGuid) ?? _fallbackDefaultValue;
+		if (previous != _appliedValue)
 		{
-			uint valueOrDefault = num.GetValueOrDefault();
-			if (valueOrDefault != _appliedValue)
-			{
-				_backupStore.Save(BackupKey, valueOrDefault.ToString());
-			}
+			_backupStore.Save(BackupKey(schemeGuid), previous.ToString());
+			_backupStore.Save(BackupSchemeKey, schemeGuid);
 		}
-		WriteValueAndVerify(_appliedValue);
+
+		WriteValueAndVerify(schemeGuid, _appliedValue);
 	}
 
 	public void Revert()
 	{
-		string text = _backupStore.TryGet(BackupKey);
-		uint result;
-		uint value = ((text != null && uint.TryParse(text, out result)) ? result : _fallbackDefaultValue);
-		WriteValueAndVerify(value);
-		_backupStore.Remove(BackupKey);
+		string? schemeGuid = _backupStore.TryGet(BackupSchemeKey);
+		if (schemeGuid == null)
+		{
+			// The value was already applied before LatencyBench touched it, so there
+			// is no known prior value to restore safely.
+			return;
+		}
+
+		string? text = _backupStore.TryGet(BackupKey(schemeGuid));
+		if (!uint.TryParse(text, out uint value))
+		{
+			throw new InvalidOperationException($"The saved backup for '{Definition.Name}' is invalid.");
+		}
+
+		WriteValueAndVerify(schemeGuid, value);
+		_backupStore.Remove(BackupKey(schemeGuid));
+		_backupStore.Remove(BackupSchemeKey);
 	}
 
 	private uint? ReadCurrentValue()
 	{
-		return _powerCfg.QueryAcValueIndex(_powerCfg.GetActiveSchemeGuid(), _subgroupGuid, _settingGuid);
+		return ReadCurrentValue(_powerCfg.GetActiveSchemeGuid());
 	}
 
-	private void WriteValueAndVerify(uint value)
+	private uint? ReadCurrentValue(string schemeGuid)
 	{
-		_powerCfg.SetAcValueIndex(_powerCfg.GetActiveSchemeGuid(), _subgroupGuid, _settingGuid, value);
-		if (ReadCurrentValue() != value)
+		return _powerCfg.QueryAcValueIndex(schemeGuid, _subgroupGuid, _settingGuid);
+	}
+
+	private void WriteValueAndVerify(string schemeGuid, uint value)
+	{
+		_powerCfg.SetAcValueIndex(schemeGuid, _subgroupGuid, _settingGuid, value);
+		if (ReadCurrentValue(schemeGuid) != value)
 		{
 			throw new InvalidOperationException("Windows didn't accept the change — this power setting isn't available on this system's active power scheme.");
 		}

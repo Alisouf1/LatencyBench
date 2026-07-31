@@ -24,7 +24,7 @@ public sealed class TweakCatalog
 		NetworkAdapterEnumerator nicEnumerator = new NetworkAdapterEnumerator();
 		return new ITweak[]
 		{
-			new HighPerformancePlanTweak(powerCfg),
+			new HighPerformancePlanTweak(powerCfg, backupStore),
 			new PowerCfgAcValueTweak(new TweakDefinition
 			{
 				Id = "power.usb-selective-suspend",
@@ -77,7 +77,11 @@ public sealed class TweakCatalog
 				RequiresReboot = true
 			}, RegistryHive.LocalMachine, "SYSTEM\\CurrentControlSet\\Control\\GraphicsDrivers", "HwSchMode", 2, 1, backupStore),
 			new TrimEnabledTweak(),
-			new ScheduledDefragTweak(),
+			// "Disable scheduled defrag" was removed rather than fixed. On Windows 8 and later that
+			// task is the Storage Optimizer: on an SSD it does not defragment at all, it issues the
+			// scheduled retrim. Disabling it therefore gives up periodic TRIM — which degrades write
+			// latency over time — in exchange for no latency benefit whatsoever, since the task only
+			// runs during maintenance windows when the machine is already idle.
 			new NagleAlgorithmTweak(backupStore),
 			new DevicePowerManagementTweak(new TweakDefinition
 			{
@@ -86,7 +90,7 @@ public sealed class TweakCatalog
 				Name = "Disable power management on network adapters",
 				Description = "Unchecks \"Allow the computer to turn off this device to save power\" for every network adapter.",
 				Risk = TweakRisk.Safe
-			}, () => (from a in nicEnumerator.EnumerateAdapters()
+			}, () => (from a in nicEnumerator.EnumeratePhysicalAdapters()
 				select a.InstanceId).ToList(), backupStore),
 			new RegistryDwordTweak(new TweakDefinition
 			{
@@ -96,7 +100,7 @@ public sealed class TweakCatalog
 				Description = "Removes the multimedia network-throttling cap Windows applies to background network traffic.",
 				Risk = TweakRisk.Safe
 			}, RegistryHive.LocalMachine, "SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Multimedia\\SystemProfile", "NetworkThrottlingIndex", -1, 10, backupStore),
-			new SysMainServiceTweak()
+			new SysMainServiceTweak(backupStore)
 		};
 	}
 

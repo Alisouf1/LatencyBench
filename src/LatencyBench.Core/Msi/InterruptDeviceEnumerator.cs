@@ -35,7 +35,7 @@ public sealed class InterruptDeviceEnumerator
 				uint devInst = deviceInfoData.DevInst;
 				num2++;
 				deviceInfoData.cbSize = (uint)Marshal.SizeOf<SP_DEVINFO_DATA>();
-				string deviceId = CfgMgr32.GetDeviceId(devInst);
+				string? deviceId = CfgMgr32.GetDeviceId(devInst);
 				if (deviceId != null && HasMsiCapability(deviceId))
 				{
 					string friendlyName = Clean(CfgMgr32.GetName(devInst)) ?? Clean(CfgMgr32.GetBusReportedDeviceDesc(devInst)) ?? Clean(CfgMgr32.GetStringProperty(devInst, 13u)) ?? Clean(CfgMgr32.GetStringProperty(devInst, 1u)) ?? deviceId;
@@ -54,7 +54,7 @@ public sealed class InterruptDeviceEnumerator
 
 	private static string? Clean(string? name)
 	{
-		string text = name?.Trim();
+		string? text = name?.Trim();
 		return string.IsNullOrEmpty(text) ? null : text;
 	}
 
@@ -102,24 +102,29 @@ public sealed class InterruptDeviceEnumerator
 
 	private static bool HasMsiCapability(string instanceId)
 	{
-		return Registry.LocalMachine.OpenSubKey("SYSTEM\\CurrentControlSet\\Enum\\" + instanceId + "\\Device Parameters\\Interrupt Management\\MessageSignaledInterruptProperties") != null;
+		// Disposed rather than discarded: this runs once per device across the entire device tree,
+		// so leaking the handle here leaked several hundred open registry keys per enumeration, and
+		// the tab re-enumerates on every refresh.
+		using RegistryKey? key = Registry.LocalMachine.OpenSubKey(
+			"SYSTEM\\CurrentControlSet\\Enum\\" + instanceId + "\\Device Parameters\\Interrupt Management\\MessageSignaledInterruptProperties");
+		return key is not null;
 	}
 
 	private static int? ReadMsiSupported(string instanceId)
 	{
-		using RegistryKey registryKey = Registry.LocalMachine.OpenSubKey("SYSTEM\\CurrentControlSet\\Enum\\" + instanceId + "\\Device Parameters\\Interrupt Management\\MessageSignaledInterruptProperties");
+		using RegistryKey? registryKey = Registry.LocalMachine.OpenSubKey("SYSTEM\\CurrentControlSet\\Enum\\" + instanceId + "\\Device Parameters\\Interrupt Management\\MessageSignaledInterruptProperties");
 		return (registryKey?.GetValue("MSISupported") is int value) ? new int?(value) : ((int?)null);
 	}
 
 	private static string? ReadServiceName(string instanceId)
 	{
-		using RegistryKey registryKey = Registry.LocalMachine.OpenSubKey("SYSTEM\\CurrentControlSet\\Enum\\" + instanceId);
+		using RegistryKey? registryKey = Registry.LocalMachine.OpenSubKey("SYSTEM\\CurrentControlSet\\Enum\\" + instanceId);
 		return registryKey?.GetValue("Service") as string;
 	}
 
 	private static InterruptPriority ReadPriority(string instanceId)
 	{
-		using RegistryKey registryKey = Registry.LocalMachine.OpenSubKey("SYSTEM\\CurrentControlSet\\Enum\\" + instanceId + "\\Device Parameters\\Interrupt Management\\Affinity Policy");
+		using RegistryKey? registryKey = Registry.LocalMachine.OpenSubKey("SYSTEM\\CurrentControlSet\\Enum\\" + instanceId + "\\Device Parameters\\Interrupt Management\\Affinity Policy");
 		return (registryKey?.GetValue("DevicePriority") is int num && Enum.IsDefined(typeof(InterruptPriority), num)) ? ((InterruptPriority)num) : InterruptPriority.Undefined;
 	}
 }

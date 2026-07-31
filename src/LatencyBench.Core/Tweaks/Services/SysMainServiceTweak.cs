@@ -1,4 +1,5 @@
 using System;
+using System.ComponentModel;
 using System.ServiceProcess;
 using Microsoft.Win32;
 using LatencyBench.Core.Tweaks.Models;
@@ -9,82 +10,115 @@ public sealed class SysMainServiceTweak : ITweak
 {
 	private const string ServiceName = "SysMain";
 
+	private const string ServiceKeyPath = @"SYSTEM\CurrentControlSet\Services\SysMain";
+
+	private const string BackupKey = "service:SysMain\\Start";
+
+	private static readonly TimeSpan StatusTimeout = TimeSpan.FromSeconds(15.0);
+
+	private readonly TweakBackupStore _backupStore;
+
 	public TweakDefinition Definition { get; } = new TweakDefinition
 	{
 		Id = "aggressive.sysmain-disable",
 		Category = TweakCategory.Aggressive,
 		Name = "Disable SysMain (Superfetch)",
-		Description = "Stops and disables the SysMain service. Frees background disk/memory activity, but was designed to speed up app launches on HDDs — less useful (and sometimes counterproductive) on modern SSD systems.",
+		Description = "Stops and disables the SysMain service. Removes its background disk and memory activity, which can show up as occasional DPC spikes on storage drivers. SysMain was designed to speed up app launches on mechanical drives, so on an SSD system the trade is usually worth it — but it is not free: expect slower first launches of large applications.",
 		Risk = TweakRisk.Aggressive
 	};
+
+	public SysMainServiceTweak(TweakBackupStore backupStore)
+	{
+		_backupStore = backupStore;
+	}
 
 	public TweakState GetState()
 	{
 		try
 		{
-			ServiceController serviceController = new ServiceController("SysMain");
-			try
-			{
-				if (serviceController.StartType == ServiceStartMode.Disabled && serviceController.Status == ServiceControllerStatus.Stopped)
-				{
-					return TweakState.Applied;
-				}
-				return TweakState.NotApplied;
-			}
-			finally
-			{
-				((IDisposable)serviceController)?.Dispose();
-			}
+			using var controller = new ServiceController(ServiceName);
+			return controller.StartType == ServiceStartMode.Disabled && controller.Status == ServiceControllerStatus.Stopped
+				? TweakState.Applied
+				: TweakState.NotApplied;
 		}
-		catch (InvalidOperationException)
+		catch (Exception ex) when (ex is InvalidOperationException or Win32Exception)
 		{
+			// InvalidOperationException covers "no such service" (some Windows editions and LTSC images
+			// do not ship SysMain); Win32Exception covers being denied access to query it.
 			return TweakState.Unknown;
 		}
 	}
 
 	public void Apply()
 	{
-		ServiceController serviceController = new ServiceController("SysMain");
-		try
+		// Record what the start mode actually was. Revert used to assume Automatic unconditionally,
+		// so reverting on a machine where SysMain had been set to Manual — or was already Disabled by
+		// the user or an image policy — silently turned the service back on against their wishes.
+		_backupStore.Save(BackupKey, ReadStartValue().ToString());
+
+		using (var controller = new ServiceController(ServiceName))
 		{
-			if (serviceController.Status != ServiceControllerStatus.Stopped)
+			if (controller.Status != ServiceControllerStatus.Stopped)
 			{
-				serviceController.Stop();
-				serviceController.WaitForStatus(ServiceControllerStatus.Stopped, TimeSpan.FromSeconds(15.0));
+				controller.Stop();
+				controller.WaitForStatus(ServiceControllerStatus.Stopped, StatusTimeout);
 			}
-			SetStartMode(ServiceStartMode.Disabled);
 		}
-		finally
-		{
-			((IDisposable)serviceController)?.Dispose();
-		}
+
+		WriteStartValue(ServiceStartValueDisabled);
 	}
 
 	public void Revert()
 	{
-		SetStartMode(ServiceStartMode.Automatic);
-		ServiceController serviceController = new ServiceController("SysMain");
-		try
+		string? saved = _backupStore.TryGet(BackupKey);
+		if (saved is null)
 		{
-			serviceController.Start();
-			serviceController.WaitForStatus(ServiceControllerStatus.Running, TimeSpan.FromSeconds(15.0));
+			// SysMain was already disabled before LatencyBench touched it; enabling it now would be a
+			// change the user never asked for.
+			return;
 		}
-		finally
+
+		if (!int.TryParse(saved, out int previousStartValue))
 		{
-			((IDisposable)serviceController)?.Dispose();
+			throw new InvalidOperationException($"The saved backup for '{Definition.Name}' is invalid.");
 		}
+
+		WriteStartValue(previousStartValue);
+
+		// Only start the service again if it was in a start-on-boot mode to begin with. Restoring
+		// Manual (3) means "available on demand", not "running now".
+		if (previousStartValue is ServiceStartValueAutomatic or ServiceStartValueAutomaticDelayed)
+		{
+			using var controller = new ServiceController(ServiceName);
+			if (controller.Status != ServiceControllerStatus.Running)
+			{
+				controller.Start();
+				controller.WaitForStatus(ServiceControllerStatus.Running, StatusTimeout);
+			}
+		}
+
+		_backupStore.Remove(BackupKey);
 	}
 
-	private static void SetStartMode(ServiceStartMode mode)
+	private const int ServiceStartValueAutomaticDelayed = 1;
+
+	private const int ServiceStartValueAutomatic = 2;
+
+	private const int ServiceStartValueDisabled = 4;
+
+	private static int ReadStartValue()
 	{
-		using RegistryKey registryKey = Registry.LocalMachine.OpenSubKey("SYSTEM\\CurrentControlSet\\Services\\SysMain", writable: true) ?? throw new InvalidOperationException("Service 'SysMain' registry key not found.");
-		int startValue = mode switch
-		{
-			ServiceStartMode.Automatic => 2,
-			ServiceStartMode.Manual => 3,
-			ServiceStartMode.Disabled => 4,
-			_ => throw new ArgumentOutOfRangeException("mode"),
-		};
-		registryKey.SetValue("Start", startValue, RegistryValueKind.DWord);
+		using RegistryKey key = Registry.LocalMachine.OpenSubKey(ServiceKeyPath)
+			?? throw new InvalidOperationException($"Service '{ServiceName}' registry key not found.");
+		return key.GetValue("Start") is int start
+			? start
+			: throw new InvalidOperationException($"Service '{ServiceName}' has no Start value to back up.");
+	}
+
+	private static void WriteStartValue(int startValue)
+	{
+		using RegistryKey key = Registry.LocalMachine.OpenSubKey(ServiceKeyPath, writable: true)
+			?? throw new InvalidOperationException($"Service '{ServiceName}' registry key not found.");
+		key.SetValue("Start", startValue, RegistryValueKind.DWord);
 	}
 }

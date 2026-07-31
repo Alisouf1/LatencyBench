@@ -8,6 +8,12 @@
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- ApplicationIcon alone only covers the Win32 resource. WPF's Window.Icon is a separate
+         lookup, so the same file is also embedded as a resource for the title bar and Alt+Tab. -->
+    <Resource Include="Assets\LatencyBench.ico" />
+  </ItemGroup>
+
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
     <TargetFramework>net8.0-windows</TargetFramework>
@@ -16,6 +22,9 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <UseWPF>true</UseWPF>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <!-- Compiled into the executable's Win32 resources, which is what Explorer, the taskbar, the
+         Start menu, Alt+Tab and any shortcut pointing at the exe all read. -->
+    <ApplicationIcon>Assets\LatencyBench.ico</ApplicationIcon>
     <!-- Display metadata only (shown in Explorer's file Properties / taskbar tooltip) — deliberately
          NOT the AssemblyName, project filename, or C# namespace, all of which stay LatencyBench.* so this
          rename touches nothing the source code depends on. -->
