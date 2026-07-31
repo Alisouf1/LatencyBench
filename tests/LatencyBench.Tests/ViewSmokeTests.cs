@@ -195,6 +195,7 @@ public class ViewSmokeTests
 			{
 				typeof(OptimizeViewModel),
 				typeof(ProcessTuningViewModel),
+				typeof(MonitorViewModel),
 				typeof(DashboardViewModel),
 				typeof(TweaksViewModel),
 				typeof(AffinityViewModel),
@@ -252,6 +253,51 @@ public class ViewSmokeTests
 
 			Assert.NotNull(view.Content);
 		});
+	}
+
+	[Fact]
+	public void MonitorViewRendersWithAPopulatedWarningLog()
+	{
+		// The warning log's item template is only exercised with at least one entry, so this drives a
+		// scripted counter source through a sustained high-DPC scenario to force a real warning rather
+		// than asserting against an always-empty list.
+		RunOnStaThread(() =>
+		{
+			var monitor = new LatencyBench.Core.Monitoring.LatencyMonitor(
+				new ScriptedHighDpcCounterSource(),
+				interval: TimeSpan.FromMilliseconds(5));
+
+			var viewModel = new MonitorViewModel(monitor);
+			viewModel.ToggleMonitoringCommand.Execute(null);
+
+			PumpUntil(() => viewModel.WarningLog.Count > 0, timeoutMilliseconds: 15_000);
+
+			var view = new MonitorView { DataContext = viewModel };
+			view.Measure(new Size(1200, 3000));
+			view.Arrange(new Rect(0, 0, 1200, 3000));
+
+			Assert.NotNull(view.Content);
+
+			viewModel.Shutdown();
+		});
+	}
+
+	/// <summary>Reports 20% DPC time forever, well past the 5% sustained threshold, so the view test
+	/// above reaches a real warning quickly and deterministically.</summary>
+	private sealed class ScriptedHighDpcCounterSource : LatencyBench.Core.Monitoring.ICounterSource
+	{
+		public void Prime()
+		{
+		}
+
+		public (double InterruptTimePercent, double DpcTimePercent, double ProcessorTimePercent) SampleCpu()
+			=> (1.0, 20.0, 30.0);
+
+		public double SampleAvailableMemoryPercent() => 80.0;
+
+		public void Dispose()
+		{
+		}
 	}
 
 	private static OptimizeViewModel BuildOptimizeViewModel() => new(

@@ -23,6 +23,9 @@
         <DataTemplate DataType="{x:Type vm:ProcessTuningViewModel}">
             <views:ProcessTuningView/>
         </DataTemplate>
+        <DataTemplate DataType="{x:Type vm:MonitorViewModel}">
+            <views:MonitorView/>
+        </DataTemplate>
         <DataTemplate DataType="{x:Type vm:MsiModeViewModel}">
             <views:MsiModeView/>
         </DataTemplate>
@@ -126,6 +129,13 @@
                         <StackPanel Orientation="Horizontal">
                             <controls:Icon Kind="Cpu" IconBrush="{Binding Foreground, RelativeSource={RelativeSource AncestorType=RadioButton}}" Width="13" Height="13" Margin="0,0,6,0"/>
                             <TextBlock Text="Processes"/>
+                        </StackPanel>
+                    </RadioButton>
+                    <RadioButton GroupName="Nav" Style="{StaticResource NavButtonStyle}"
+                                 IsChecked="{Binding CurrentSection, Converter={StaticResource EnumToBooleanConverter}, ConverterParameter=Monitor}">
+                        <StackPanel Orientation="Horizontal">
+                            <controls:Icon Kind="DpcIsr" IconBrush="{Binding Foreground, RelativeSource={RelativeSource AncestorType=RadioButton}}" Width="13" Height="13" Margin="0,0,6,0"/>
+                            <TextBlock Text="Monitor"/>
                         </StackPanel>
                     </RadioButton>
                     <RadioButton GroupName="Nav" Style="{StaticResource NavButtonStyle}"

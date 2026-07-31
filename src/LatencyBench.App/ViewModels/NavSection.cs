@@ -11,4 +11,5 @@ public enum NavSection
     Tweaks,
     MouseTest,
     Processes,
+    Monitor,
 }

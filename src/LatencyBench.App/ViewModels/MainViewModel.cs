@@ -51,6 +51,8 @@ public sealed partial class MainViewModel : ObservableObject
 
     public ProcessTuningViewModel Processes { get; }
 
+    public MonitorViewModel Monitor { get; }
+
     [ObservableProperty]
     private NavSection _currentSection = NavSection.Dashboard;
 
@@ -88,6 +90,7 @@ public sealed partial class MainViewModel : ObservableObject
         // becomes evidence the analysis can use rather than a separate copy that never updates.
         Optimize = new OptimizeViewModel(Recommendations, traceHistory, affinityService, interruptDeviceService);
         Processes = new ProcessTuningViewModel(new LatencyBench.Core.Processes.ProcessTuner());
+        Monitor = new MonitorViewModel(new LatencyBench.Core.Monitoring.LatencyMonitor());
         CurrentViewModel = Dashboard;
 
         Affinity.LoadIfNeeded();
@@ -112,6 +115,7 @@ public sealed partial class MainViewModel : ObservableObject
     {
         Affinity.SetActive(false);
         DpcIsr.Dispose();
+        Monitor.Shutdown();
     }
 
     public void SetWindowHandle(IntPtr handle)
@@ -229,6 +233,7 @@ public sealed partial class MainViewModel : ObservableObject
             NavSection.Affinity => Affinity,
             NavSection.Tweaks => Tweaks,
             NavSection.Processes => Processes,
+            NavSection.Monitor => Monitor,
             NavSection.MouseTest => MouseTest,
             _ => Dashboard,
         };
@@ -267,6 +272,8 @@ public sealed partial class MainViewModel : ObservableObject
         {
             Processes.LoadIfNeeded();
         }
+        // Monitor has nothing to load — it stays idle until the user clicks Start, deliberately, so
+        // opening the tab never silently begins sampling.
         else if (value == NavSection.PortTest)
         {
             PortTest.LoadIfNeeded();
