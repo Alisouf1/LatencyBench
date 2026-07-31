@@ -20,6 +20,9 @@
         <DataTemplate DataType="{x:Type vm:OptimizeViewModel}">
             <views:OptimizeView/>
         </DataTemplate>
+        <DataTemplate DataType="{x:Type vm:ProcessTuningViewModel}">
+            <views:ProcessTuningView/>
+        </DataTemplate>
         <DataTemplate DataType="{x:Type vm:MsiModeViewModel}">
             <views:MsiModeView/>
         </DataTemplate>
@@ -116,6 +119,13 @@
                         <StackPanel Orientation="Horizontal">
                             <controls:Icon Kind="Affinity" IconBrush="{Binding Foreground, RelativeSource={RelativeSource AncestorType=RadioButton}}" Width="13" Height="13" Margin="0,0,6,0"/>
                             <TextBlock Text="Affinity"/>
+                        </StackPanel>
+                    </RadioButton>
+                    <RadioButton GroupName="Nav" Style="{StaticResource NavButtonStyle}"
+                                 IsChecked="{Binding CurrentSection, Converter={StaticResource EnumToBooleanConverter}, ConverterParameter=Processes}">
+                        <StackPanel Orientation="Horizontal">
+                            <controls:Icon Kind="Cpu" IconBrush="{Binding Foreground, RelativeSource={RelativeSource AncestorType=RadioButton}}" Width="13" Height="13" Margin="0,0,6,0"/>
+                            <TextBlock Text="Processes"/>
                         </StackPanel>
                     </RadioButton>
                     <RadioButton GroupName="Nav" Style="{StaticResource NavButtonStyle}"

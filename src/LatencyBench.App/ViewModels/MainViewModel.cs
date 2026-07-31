@@ -49,6 +49,8 @@ public sealed partial class MainViewModel : ObservableObject
 
     public OptimizeViewModel Optimize { get; }
 
+    public ProcessTuningViewModel Processes { get; }
+
     [ObservableProperty]
     private NavSection _currentSection = NavSection.Dashboard;
 
@@ -85,6 +87,7 @@ public sealed partial class MainViewModel : ObservableObject
         // Shares the same trace history the DPC/ISR tab writes to, so a trace saved there immediately
         // becomes evidence the analysis can use rather than a separate copy that never updates.
         Optimize = new OptimizeViewModel(Recommendations, traceHistory, affinityService, interruptDeviceService);
+        Processes = new ProcessTuningViewModel(new LatencyBench.Core.Processes.ProcessTuner());
         CurrentViewModel = Dashboard;
 
         Affinity.LoadIfNeeded();
@@ -225,6 +228,7 @@ public sealed partial class MainViewModel : ObservableObject
             NavSection.MsiMode => MsiMode,
             NavSection.Affinity => Affinity,
             NavSection.Tweaks => Tweaks,
+            NavSection.Processes => Processes,
             NavSection.MouseTest => MouseTest,
             _ => Dashboard,
         };
@@ -258,6 +262,10 @@ public sealed partial class MainViewModel : ObservableObject
         else if (value == NavSection.Optimize)
         {
             Optimize.LoadIfNeeded();
+        }
+        else if (value == NavSection.Processes)
+        {
+            Processes.LoadIfNeeded();
         }
         else if (value == NavSection.PortTest)
         {

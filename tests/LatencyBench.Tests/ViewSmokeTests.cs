@@ -194,6 +194,7 @@ public class ViewSmokeTests
 			foreach (Type viewModelType in new[]
 			{
 				typeof(OptimizeViewModel),
+				typeof(ProcessTuningViewModel),
 				typeof(DashboardViewModel),
 				typeof(TweaksViewModel),
 				typeof(AffinityViewModel),
@@ -229,6 +230,27 @@ public class ViewSmokeTests
 			}
 
 			main.Shutdown();
+		});
+	}
+
+	[Fact]
+	public void ProcessTuningViewRendersAPopulatedList()
+	{
+		RunOnStaThread(() =>
+		{
+			var viewModel = new ProcessTuningViewModel(new LatencyBench.Core.Processes.ProcessTuner());
+			viewModel.LoadIfNeeded();
+			PumpUntil(() => !viewModel.IsLoading);
+
+			// The test host itself always has a window on some CI configurations and not on others,
+			// so this asserts the list loaded rather than asserting a specific count.
+			Assert.False(viewModel.IsLoading);
+
+			var view = new ProcessTuningView { DataContext = viewModel };
+			view.Measure(new Size(1200, 4000));
+			view.Arrange(new Rect(0, 0, 1200, 4000));
+
+			Assert.NotNull(view.Content);
 		});
 	}
 

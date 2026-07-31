@@ -10,4 +10,5 @@ public enum NavSection
     Affinity,
     Tweaks,
     MouseTest,
+    Processes,
 }
