@@ -55,6 +55,7 @@ public sealed class RecommendationEngine
 		// Ordered roughly by how fundamental the finding is. Ranking happens afterwards, so this
 		// order only decides tie-breaks between equal scores.
 		new VirtualMachineRule(),
+		new PlatformClockRule(),
 		new MemoryIntegrityRule(),
 		new DriverLatencyRule(),
 		new UsbControllerAffinityRule(),
@@ -65,6 +66,8 @@ public sealed class RecommendationEngine
 		new UsbSelectiveSuspendRule(),
 		new UsbHubPowerManagementRule(),
 		new HardwareGpuSchedulingRule(),
+		new MmcssGamesProfileRule(),
+		new TimerResolutionRule(),
 		new NetworkPowerManagementRule(),
 		new NagleAlgorithmRule(),
 		new NetworkThrottlingRule(),

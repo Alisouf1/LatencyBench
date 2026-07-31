@@ -20,6 +20,9 @@ namespace LatencyBench.Core.Tweaks;
 /// </summary>
 public class TweakCatalog
 {
+	private const string MmcssGamesTaskPath =
+		@"SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile\Tasks\Games";
+
 	public virtual IReadOnlyList<ITweak> BuildAll()
 	{
 		PowerCfgRunner powerCfg = new PowerCfgRunner();
@@ -104,7 +107,43 @@ public class TweakCatalog
 				Description = "Removes the multimedia network-throttling cap Windows applies to background network traffic.",
 				Risk = TweakRisk.Safe
 			}, RegistryHive.LocalMachine, "SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Multimedia\\SystemProfile", "NetworkThrottlingIndex", -1, 10, backupStore),
-			new SysMainServiceTweak(backupStore)
+			new SysMainServiceTweak(backupStore),
+			// --- Multimedia class scheduler -------------------------------------------------
+			// MMCSS boosts threads that register with a named task. Games and audio engines
+			// register with the "Games" and "Pro Audio" profiles, so these two values change how
+			// the scheduler treats them.
+			//
+			// Only the two settings Microsoft documents are exposed. The profile also contains a
+			// "GPU Priority" value that is copied around gaming guides constantly; its semantics
+			// are not documented anywhere, nothing in the graphics stack is known to read it, and
+			// a tweak whose effect cannot be stated is exactly what this app is meant to replace.
+			new RegistryStringTweak(new TweakDefinition
+			{
+				Id = "mmcss.games-scheduling-category",
+				Category = TweakCategory.Cpu,
+				Name = "MMCSS scheduling category: High for games",
+				Description = "Raises the multimedia scheduler's category for threads registered under the Games profile, so they are scheduled ahead of ordinary work.",
+				Risk = TweakRisk.Safe
+			}, RegistryHive.LocalMachine, MmcssGamesTaskPath, "Scheduling Category", "High", "Medium", backupStore),
+			new RegistryStringTweak(new TweakDefinition
+			{
+				Id = "mmcss.games-sfio-priority",
+				Category = TweakCategory.Cpu,
+				Name = "MMCSS scheduled I/O priority: High for games",
+				Description = "Raises the I/O priority the multimedia scheduler grants threads registered under the Games profile.",
+				Risk = TweakRisk.Safe
+			}, RegistryHive.LocalMachine, MmcssGamesTaskPath, "SFIO Priority", "High", "Normal", backupStore),
+			// --- Timer resolution -----------------------------------------------------------
+			new RegistryDwordTweak(new TweakDefinition
+			{
+				Id = "timer.global-resolution-requests",
+				Category = TweakCategory.Cpu,
+				Name = "Restore global timer resolution requests",
+				Description = "Makes a timer resolution request from any process apply machine-wide again, as it did before Windows 10 version 2004. Requires a reboot.",
+				Risk = TweakRisk.RequiresReboot,
+				RequiresReboot = true
+			}, RegistryHive.LocalMachine, @"SYSTEM\CurrentControlSet\Control\Session Manager\kernel",
+				"GlobalTimerResolutionRequests", 1, 0, backupStore)
 		};
 	}
 

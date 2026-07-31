@@ -264,8 +264,26 @@ public sealed class SystemProfiler
 			.Select(controller => new UsbHostControllerSummary(
 				controller.InstanceId,
 				controller.FriendlyName,
-				CountDescendants(controller)))
+				CountDescendants(controller),
+				ReadNumaNode(controller.InstanceId)))
 			.ToList();
+	}
+
+	/// <summary>
+	/// The NUMA node a device is attached to, or null when Windows does not report one. A single-node
+	/// consumer machine reports nothing here, which is why null is a normal answer rather than a
+	/// failure.
+	/// </summary>
+	private static int? ReadNumaNode(string instanceId)
+	{
+		if (CfgMgr32.CM_Locate_DevNodeW(out uint devInst, instanceId, CfgMgr32.CM_LOCATE_DEVNODE_NORMAL)
+			!= CfgMgr32.CR_SUCCESS)
+		{
+			return null;
+		}
+
+		uint? node = CfgMgr32.GetUInt32Property(devInst, CfgMgr32.DEVPKEY_Device_Numa_Node);
+		return node.HasValue ? (int)node.Value : null;
 	}
 
 	private static int CountDescendants(UsbDeviceNode node)

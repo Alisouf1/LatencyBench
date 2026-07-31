@@ -6,6 +6,7 @@ using LatencyBench.Core.HidTesting.Models;
 using LatencyBench.Core.Models;
 using LatencyBench.Core.Msi;
 using LatencyBench.Core.SystemInfo.Models;
+using LatencyBench.Core.Timers;
 using LatencyBench.Core.Tweaks.Models;
 
 namespace LatencyBench.Core.Recommendations;
@@ -33,6 +34,13 @@ public sealed class RecommendationContext
 
 	/// <summary>Saved port tests.</summary>
 	public IReadOnlyList<HidTestResult> PortTests { get; init; } = Array.Empty<HidTestResult>();
+
+	/// <summary>
+	/// Timer resolution and the timer-related boot options. Null when it has not been read — reading
+	/// the boot configuration shells out to bcdedit and needs elevation, so rules must treat its
+	/// absence as "do not know" rather than as "nothing set".
+	/// </summary>
+	public TimerState? Timers { get; init; }
 
 	/// <summary>True when the process can actually write the settings a recommendation would apply.
 	/// Rules still produce recommendations without it — the user should see what is available — but

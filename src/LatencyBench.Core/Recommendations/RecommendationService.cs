@@ -9,6 +9,7 @@ using LatencyBench.Core.Models;
 using LatencyBench.Core.Msi;
 using LatencyBench.Core.SystemInfo;
 using LatencyBench.Core.SystemInfo.Models;
+using LatencyBench.Core.Timers;
 using LatencyBench.Core.Tweaks;
 using LatencyBench.Core.Tweaks.Models;
 
@@ -35,17 +36,20 @@ public class RecommendationService
 	private readonly TweakCatalog _tweakCatalog;
 	private readonly InterruptDeviceEnumerator _interruptDeviceEnumerator;
 	private readonly RecommendationEngine _engine;
+	private readonly TimerDiagnostics _timerDiagnostics;
 
 	public RecommendationService(
 		SystemProfiler profiler,
 		TweakCatalog? tweakCatalog = null,
 		InterruptDeviceEnumerator? interruptDeviceEnumerator = null,
-		RecommendationEngine? engine = null)
+		RecommendationEngine? engine = null,
+		TimerDiagnostics? timerDiagnostics = null)
 	{
 		_profiler = profiler;
 		_tweakCatalog = tweakCatalog ?? new TweakCatalog();
 		_interruptDeviceEnumerator = interruptDeviceEnumerator ?? new InterruptDeviceEnumerator();
 		_engine = engine ?? new RecommendationEngine();
+		_timerDiagnostics = timerDiagnostics ?? new TimerDiagnostics();
 	}
 
 	/// <summary>
@@ -72,9 +76,25 @@ public class RecommendationService
 			TweakStates = ReadTweakStates(),
 			InterruptDevices = ReadInterruptDevices(),
 			AffinityPolicies = ReadAffinityPolicies(profile),
+			Timers = ReadTimers(profile.Windows.BuildNumber),
 			DpcIsrTraces = traces,
 			IsElevated = ElevationHelper.IsRunningAsAdministrator()
 		};
+	}
+
+	private TimerState? ReadTimers(int windowsBuildNumber)
+	{
+		try
+		{
+			return _timerDiagnostics.Read(windowsBuildNumber);
+		}
+		catch (Exception)
+		{
+			// Null means "not read", which the timer rules report as Undetermined. That is the honest
+			// outcome: without elevation the boot configuration genuinely cannot be inspected, and
+			// reporting "no platform clock forced" would be a guess.
+			return null;
+		}
 	}
 
 	private Dictionary<string, TweakState> ReadTweakStates()

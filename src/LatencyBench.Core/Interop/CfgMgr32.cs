@@ -90,6 +90,41 @@ internal static class CfgMgr32
 		}
 	}
 
+	/// <summary>
+	/// DEVPKEY_Device_Numa_Node. The NUMA node the device is physically attached to, which on a
+	/// multi-socket or multi-die machine is not necessarily the node whose cores are free.
+	/// </summary>
+	public static readonly DEVPROPKEY DEVPKEY_Device_Numa_Node = new DEVPROPKEY
+	{
+		fmtid = new Guid("540B947E-8B40-45BC-A8A2-6A0B894CBDA2"),
+		pid = 3u
+	};
+
+	/// <summary>
+	/// Reads a DEVPROP_TYPE_UINT32 device property. Returns null when the device does not expose it,
+	/// which is the normal case for NUMA node on a single-node consumer machine.
+	/// </summary>
+	public static uint? GetUInt32Property(uint devInst, DEVPROPKEY property)
+	{
+		uint bufferSize = sizeof(uint);
+		DEVPROPKEY propertyKey = property;
+		nint buffer = Marshal.AllocHGlobal((int)bufferSize);
+		try
+		{
+			if (CM_Get_DevNode_PropertyW(devInst, ref propertyKey, out _, buffer, ref bufferSize, 0u) != CR_SUCCESS
+				|| bufferSize < sizeof(uint))
+			{
+				return null;
+			}
+
+			return unchecked((uint)Marshal.ReadInt32(buffer));
+		}
+		finally
+		{
+			Marshal.FreeHGlobal(buffer);
+		}
+	}
+
 	public static string? GetDeviceId(uint devInst)
 	{
 		StringBuilder stringBuilder = new StringBuilder(512);

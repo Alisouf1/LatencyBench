@@ -72,7 +72,7 @@ public sealed class UsbControllerAffinityRule : IRecommendationRule
 				Id, Title, $"{busiest.FriendlyName} already has an interrupt affinity policy set.");
 		}
 
-		PhysicalCore? target = ChooseTargetCore(topology);
+		PhysicalCore? target = ChooseTargetCore(topology, busiest.NumaNode);
 		if (target?.PrimaryLogicalProcessor is not { } logicalProcessor)
 		{
 			return new RuleOutcome.Undetermined(
@@ -92,6 +92,14 @@ public sealed class UsbControllerAffinityRule : IRecommendationRule
 			evidence.Add(new(
 				"This is a hybrid CPU, so the choice was restricted to performance cores.",
 				"Processor topology"));
+		}
+
+		if (busiest.NumaNode is { } deviceNode && topology.NumaNodes.Count > 1)
+		{
+			evidence.Add(new(
+				$"The controller is attached to NUMA node {deviceNode}, and the chosen core is on " +
+				$"node {topology.NumaNodeOf(logicalProcessor)?.ToString() ?? "unknown"}.",
+				"Device NUMA node"));
 		}
 
 		DpcIsrTestResult? trace = context.LatestTrace;
@@ -139,8 +147,15 @@ public sealed class UsbControllerAffinityRule : IRecommendationRule
 	/// Picks the core to hand the interrupts to. Prefers a performance core, never core 0, and takes
 	/// the highest-numbered candidate because the low-numbered cores are where Windows concentrates
 	/// its own work and where most applications' threads land first.
+	/// <para>
+	/// When the device reports a NUMA node and the machine has more than one, the choice is confined
+	/// to that node. Servicing a device's interrupts on a core in a different node means the handler
+	/// reaches the device's memory across the interconnect on every interrupt, which costs more than
+	/// the dedicated core saves. The restriction is dropped rather than failing if that node has no
+	/// usable core, since a suboptimal pin still beats none.
+	/// </para>
 	/// </summary>
-	private static PhysicalCore? ChooseTargetCore(CpuTopology topology)
+	private static PhysicalCore? ChooseTargetCore(CpuTopology topology, int? deviceNumaNode)
 	{
 		IEnumerable<PhysicalCore> candidates = topology.IsHybrid
 			? topology.PerformanceCores
@@ -150,6 +165,18 @@ public sealed class UsbControllerAffinityRule : IRecommendationRule
 			.Where(core => core.PrimaryLogicalProcessor is > 0)
 			.OrderByDescending(core => core.CoreIndex)
 			.ToList();
+
+		if (deviceNumaNode is { } node && topology.NumaNodes.Count > 1)
+		{
+			var onNode = usable
+				.Where(core => core.PrimaryLogicalProcessor is { } lp && topology.NumaNodeOf(lp) == node)
+				.ToList();
+
+			if (onNode.Count > 0)
+			{
+				return onNode[0];
+			}
+		}
 
 		return usable.FirstOrDefault();
 	}

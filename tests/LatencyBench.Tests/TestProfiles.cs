@@ -49,10 +49,21 @@ public static class TestProfiles
 		}
 
 		int totalLogical = logical;
+
+		// Split into contiguous blocks of whole cores, which is how real hardware is laid out — a
+		// socket or a die owns a run of adjacent cores. Interleaving by parity instead would put every
+		// core's first logical processor on the same node, so no core would ever be reachable on
+		// node 1 and a NUMA-aware selection would look broken when it was not.
+		int coresPerNode = Math.Max(1, (int)Math.Ceiling(cores.Count / (double)numaNodes));
 		var nodes = Enumerable.Range(0, numaNodes)
 			.Select(node => new NumaNode(
 				node,
-				Enumerable.Range(0, totalLogical).Where(lp => lp % numaNodes == node).ToList()))
+				cores
+					.Skip(node * coresPerNode)
+					.Take(coresPerNode)
+					.SelectMany(core => core.LogicalProcessors)
+					.ToList()))
+			.Where(node => node.LogicalProcessors.Count > 0)
 			.ToList();
 
 		return new CpuTopology
@@ -98,11 +109,12 @@ public static class TestProfiles
 		int usbControllers = 3,
 		int usbDevicesOnBusiest = 6,
 		int networkAdapters = 1,
-		IReadOnlyList<GpuInfo>? gpus = null)
+		IReadOnlyList<GpuInfo>? gpus = null,
+		IReadOnlyList<UsbHostControllerSummary>? usbControllerOverride = null)
 	{
 		topology ??= Topology();
 
-		var controllers = Enumerable.Range(0, usbControllers)
+		var controllers = usbControllerOverride?.ToList() ?? Enumerable.Range(0, usbControllers)
 			.Select(i => new UsbHostControllerSummary(
 				$@"PCI\VEN_1022&DEV_15B6\{i}",
 				$"USB xHCI Host Controller {i}",

@@ -159,6 +159,15 @@ public sealed class SystemProfile
 	public required IReadOnlyList<string> Warnings { get; init; }
 }
 
-public sealed record UsbHostControllerSummary(string InstanceId, string FriendlyName, int AttachedDeviceCount);
+/// <param name="NumaNode">
+/// The node the controller is physically attached to, or null when Windows does not report one —
+/// which is normal on a single-node consumer machine. On a multi-node system, servicing a device's
+/// interrupts on a core in a different node means every access crosses the interconnect.
+/// </param>
+public sealed record UsbHostControllerSummary(
+	string InstanceId,
+	string FriendlyName,
+	int AttachedDeviceCount,
+	int? NumaNode = null);
 
 public sealed record NetworkAdapterSummary(string InstanceId, string FriendlyName);

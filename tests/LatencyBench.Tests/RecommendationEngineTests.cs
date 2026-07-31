@@ -321,6 +321,43 @@ public class RecommendationEngineTests
 	}
 
 	[Fact]
+	public void AffinityKeepsTheChosenCoreOnTheDevicesNumaNode()
+	{
+		// Untestable on the development machine, which has one node. Servicing a device's interrupts
+		// on a core in another node means crossing the interconnect on every interrupt, which costs
+		// more than the dedicated core saves.
+		var topology = TestProfiles.Topology(physicalCores: 16, threadsPerCore: 2, numaNodes: 2);
+		var profile = TestProfiles.Profile(topology: topology);
+
+		// Node 1 in the test topology holds the odd-numbered logical processors.
+		var onNodeOne = profile.UsbControllers
+			.Select((controller, index) => index == 0 ? controller with { NumaNode = 1 } : controller)
+			.ToList();
+
+		var report = new RecommendationEngine().Analyze(Context(
+			TestProfiles.Profile(topology: topology, usbControllerOverride: onNodeOne)));
+
+		var action = report.Recommendations
+			.Select(r => r.Action)
+			.OfType<RecommendedAction.SetInterruptAffinity>()
+			.Single();
+
+		int chosen = action.Cores.Single();
+		Assert.Equal(1, topology.NumaNodeOf(chosen));
+	}
+
+	[Fact]
+	public void AffinityIgnoresNumaOnASingleNodeMachine()
+	{
+		// A single-node machine reports no node at all for its devices, and the restriction must not
+		// then eliminate every candidate.
+		var report = new RecommendationEngine().Analyze(Context(
+			TestProfiles.Profile(topology: TestProfiles.Topology(physicalCores: 8, numaNodes: 1))));
+
+		Assert.Contains(report.Recommendations, r => r.Id == "rec.interrupts.usb-controller-affinity");
+	}
+
+	[Fact]
 	public void AffinityIsSkippedWhenAPolicyIsAlreadySet()
 	{
 		var profile = TestProfiles.Profile();
