@@ -81,7 +81,17 @@ public sealed partial class ProcessTuningViewModel : ObservableObject
             _tuner.SetPriority(row.Id, priority);
             row.UpdatePriority(priority);
             row.RowError = null;
+            row.ClearWriteBlocked();
             Status = $"{row.DisplayName}: priority set to {priority}.";
+        }
+        catch (ProcessWriteBlockedException ex)
+        {
+            // The proactive CanModify probe did not catch this in advance — some anti-cheat drivers let
+            // the access check it performs succeed while still silently blocking the actual write. Now
+            // that a write has actually been refused, disable the row's buttons from here on instead of
+            // leaving them clickable and hitting the same wall again with no visible explanation.
+            row.MarkConfirmedWriteBlocked();
+            row.RowError = ex.Message;
         }
         catch (Exception ex)
         {
@@ -99,7 +109,13 @@ public sealed partial class ProcessTuningViewModel : ObservableObject
             _tuner.SetIoPriority(row.Id, priority);
             row.UpdateIoPriority(priority);
             row.RowError = null;
+            row.ClearWriteBlocked();
             Status = $"{row.DisplayName}: I/O priority set to {priority}.";
+        }
+        catch (ProcessWriteBlockedException ex)
+        {
+            row.MarkConfirmedWriteBlocked();
+            row.RowError = ex.Message;
         }
         catch (Exception ex)
         {
@@ -114,7 +130,13 @@ public sealed partial class ProcessTuningViewModel : ObservableObject
             _tuner.ClearAffinity(row.Id);
             row.UpdateAffinityCleared();
             row.RowError = null;
+            row.ClearWriteBlocked();
             Status = $"{row.DisplayName}: restored to all processors.";
+        }
+        catch (ProcessWriteBlockedException ex)
+        {
+            row.MarkConfirmedWriteBlocked();
+            row.RowError = ex.Message;
         }
         catch (Exception ex)
         {
@@ -134,7 +156,7 @@ public sealed partial class ProcessRowViewModel : ObservableObject
         Name = process.Name;
         DisplayName = process.DisplayName;
         IsAccessible = process.IsAccessible;
-        CanModify = process.CanModify;
+        _canModify = process.CanModify;
         _priority = process.PriorityClass;
         _ioPriority = process.IoPriority;
         HasCustomAffinity = IsRestricted(process.AffinityMask);
@@ -162,9 +184,20 @@ public sealed partial class ProcessRowViewModel : ObservableObject
     public bool IsAccessible { get; }
 
     /// <summary>Whether priority/I/O priority/affinity can plausibly be changed at all for this
-    /// process — see <see cref="TunableProcess.CanModify"/>. Always false when
-    /// <see cref="IsAccessible"/> is false.</summary>
-    public bool CanModify { get; }
+    /// process. Starts from <see cref="TunableProcess.CanModify"/>'s proactive access-right probe, but
+    /// is not final: some anti-cheat drivers let that probe succeed while still silently blocking the
+    /// actual write, so this can also flip to false reactively — see
+    /// <see cref="MarkConfirmedWriteBlocked"/>. Always false when <see cref="IsAccessible"/> is
+    /// false.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsWriteProtected))]
+    [NotifyPropertyChangedFor(nameof(DisabledReason))]
+    private bool _canModify;
+
+    /// <summary>True once a write on this row was actually attempted and confirmed refused (as
+    /// opposed to <see cref="CanModify"/> being false purely on the proactive probe's say-so) — changes
+    /// the tooltip wording from "appears to be protected" to something more certain.</summary>
+    private bool _confirmedWriteBlocked;
 
     /// <summary>True specifically when this process is readable but not writable — the
     /// anti-cheat-shaped case, distinct from <see cref="IsAccessible"/> being false outright.</summary>
@@ -175,9 +208,38 @@ public sealed partial class ProcessRowViewModel : ObservableObject
     public string? DisabledReason => !IsAccessible
         ? "Not accessible — running at a higher integrity level."
         : !CanModify
-            ? "Priority, I/O priority and affinity can't be changed for this process. It appears to be " +
-              "protected — commonly by anti-cheat software (e.g. EasyAntiCheat, BattlEye, Vanguard)."
+            ? (_confirmedWriteBlocked
+                ? "Priority, I/O priority and affinity can't be changed for this process — a change was " +
+                  "attempted and silently refused. This is commonly anti-cheat software (e.g. " +
+                  "EasyAntiCheat, BattlEye, Vanguard) protecting the process."
+                : "Priority, I/O priority and affinity can't be changed for this process. It appears to " +
+                  "be protected — commonly by anti-cheat software (e.g. EasyAntiCheat, BattlEye, " +
+                  "Vanguard).")
             : null;
+
+    /// <summary>
+    /// Called when a write to this process was attempted and came back as
+    /// <see cref="ProcessWriteBlockedException"/> — confirmation the process is write-protected even
+    /// though the proactive <see cref="CanModify"/> probe said it should have been allowed. Some
+    /// anti-cheat drivers permit opening a handle with the access right that probe checks while still
+    /// blocking the actual write underneath it, so the probe alone cannot always catch this in advance;
+    /// this is the fallback that catches it after the fact instead, so a second click does not hit the
+    /// same silent wall.
+    /// </summary>
+    internal void MarkConfirmedWriteBlocked()
+    {
+        _confirmedWriteBlocked = true;
+        CanModify = false;
+    }
+
+    /// <summary>Called after a write on this row actually succeeds. A row that was disabled — whether
+    /// from the proactive probe or a previously confirmed refusal — should stop looking protected once
+    /// a real write goes through; neither signal was ever guaranteed permanent.</summary>
+    internal void ClearWriteBlocked()
+    {
+        _confirmedWriteBlocked = false;
+        CanModify = true;
+    }
 
     [ObservableProperty]
     private ProcessPriorityClass? _priority;

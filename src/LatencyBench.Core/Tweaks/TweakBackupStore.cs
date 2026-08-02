@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Text.Json;
+using LatencyBench.Core.Persistence;
 
 namespace LatencyBench.Core.Tweaks;
 
@@ -143,20 +144,7 @@ public sealed class TweakBackupStore
     private void PersistLocked(Dictionary<string, string> data)
     {
         string json = JsonSerializer.Serialize(data, new JsonSerializerOptions { WriteIndented = true });
-        string temporaryPath = _filePath + ".tmp";
-
-        // Write-then-replace. File.WriteAllText straight onto the real path truncates it first, so an
-        // interruption at that moment leaves an empty or partial file and every prior backup is gone.
-        File.WriteAllText(temporaryPath, json);
-        if (File.Exists(_filePath))
-        {
-            File.Replace(temporaryPath, _filePath, destinationBackupFileName: null, ignoreMetadataErrors: true);
-        }
-        else
-        {
-            File.Move(temporaryPath, _filePath);
-        }
-
+        AtomicFileWriter.Write(_filePath, json);
         _cache = data;
     }
 }

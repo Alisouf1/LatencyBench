@@ -46,6 +46,25 @@ public sealed record TunableProcess(
 }
 
 /// <summary>
+/// Thrown when a write to a process's priority, I/O priority or affinity did not report an error but
+/// the value did not actually change on re-read afterward — the anti-cheat-shaped failure mode.
+/// <para>
+/// A plain <see cref="InvalidOperationException"/> also covers unrelated refusals ("this is a core
+/// Windows process", the process having exited between calls); this narrower type exists so a caller
+/// can specifically recognize "the write was silently refused" and treat it as confirmation the
+/// process is write-protected — including cases where <see cref="ProcessTuner.CanModify"/>'s
+/// proactive access-right probe did not catch it in advance, because some anti-cheat drivers allow
+/// the handle to be opened with the right access but still block the actual write underneath it.
+/// </para>
+/// </summary>
+public sealed class ProcessWriteBlockedException : InvalidOperationException
+{
+    public ProcessWriteBlockedException(string message) : base(message)
+    {
+    }
+}
+
+/// <summary>
 /// Reads and changes per-process scheduling state.
 /// <para>
 /// Everything here is deliberately session-scoped. Priority class, I/O priority and processor
@@ -55,7 +74,7 @@ public sealed record TunableProcess(
 /// every launch of that executable and is a materially different and riskier thing.
 /// </para>
 /// </summary>
-public sealed class ProcessTuner
+public class ProcessTuner
 {
     /// <summary>
     /// Processes that must never be retuned. Starving any of these produces a machine that appears
@@ -179,7 +198,7 @@ public sealed class ProcessTuner
     /// unresponsive until that process yields, and the user cannot open Task Manager to stop it.
     /// </para>
     /// </summary>
-    public void SetPriority(int processId, ProcessPriorityClass priority)
+    public virtual void SetPriority(int processId, ProcessPriorityClass priority)
     {
         if (priority == ProcessPriorityClass.RealTime)
         {
@@ -211,7 +230,7 @@ public sealed class ProcessTuner
         process.Refresh();
         if (process.PriorityClass != priority)
         {
-            throw new InvalidOperationException(
+            throw new ProcessWriteBlockedException(
                 $"'{process.ProcessName}' did not actually change priority to {priority} (it is still " +
                 $"{process.PriorityClass}), even though the request did not report an error. This usually " +
                 "means anti-cheat or another security tool is protecting the process.");
@@ -225,7 +244,7 @@ public sealed class ProcessTuner
     /// reject it anyway, so offering it would only produce a confusing failure.
     /// </para>
     /// </summary>
-    public void SetIoPriority(int processId, IoPriority priority)
+    public virtual void SetIoPriority(int processId, IoPriority priority)
     {
         if (priority == IoPriority.Critical)
         {
@@ -262,7 +281,7 @@ public sealed class ProcessTuner
         IoPriority? actual = ReadIoPriority(process.Handle);
         if (actual != priority)
         {
-            throw new InvalidOperationException(
+            throw new ProcessWriteBlockedException(
                 $"'{process.ProcessName}' did not actually change I/O priority to {priority} (it is still " +
                 $"{(actual?.ToString() ?? "unreadable")}), even though the request did not report an error. " +
                 "This usually means anti-cheat or another security tool is protecting the process.");
@@ -291,7 +310,7 @@ public sealed class ProcessTuner
     /// into a state where the process cannot be scheduled at all.
     /// </para>
     /// </summary>
-    public void SetAffinity(int processId, IReadOnlyList<int> logicalProcessors, CpuTopology? topology = null)
+    public virtual void SetAffinity(int processId, IReadOnlyList<int> logicalProcessors, CpuTopology? topology = null)
     {
         if (logicalProcessors.Count == 0)
         {
@@ -338,7 +357,7 @@ public sealed class ProcessTuner
         process.Refresh();
         if (unchecked((ulong)process.ProcessorAffinity.ToInt64()) != expectedMask)
         {
-            throw new InvalidOperationException(
+            throw new ProcessWriteBlockedException(
                 $"'{process.ProcessName}' did not actually change its processor affinity, even though the " +
                 "request did not report an error. This usually means anti-cheat or another security tool " +
                 "is protecting the process.");
@@ -346,7 +365,7 @@ public sealed class ProcessTuner
     }
 
     /// <summary>Restores a process to every logical processor.</summary>
-    public void ClearAffinity(int processId)
+    public virtual void ClearAffinity(int processId)
     {
         using Process process = Process.GetProcessById(processId);
         if (IsProtected(process.ProcessName))
@@ -364,7 +383,7 @@ public sealed class ProcessTuner
         process.Refresh();
         if (unchecked((ulong)process.ProcessorAffinity.ToInt64()) != all)
         {
-            throw new InvalidOperationException(
+            throw new ProcessWriteBlockedException(
                 $"'{process.ProcessName}' did not actually restore its processor affinity, even though the " +
                 "request did not report an error. This usually means anti-cheat or another security tool " +
                 "is protecting the process.");

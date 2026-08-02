@@ -28,7 +28,7 @@ public sealed partial class AffinityViewModel : ObservableObject
     private readonly DeviceRestartService _restartService;
     private readonly UsbTreeEnumerator _treeEnumerator;
     private readonly InterruptDeviceEnumerator _deviceEnumerator;
-    private readonly CpuUsageMonitor _cpuUsageMonitor = new();
+    private readonly CpuUsageMonitor _cpuUsageMonitor;
     private readonly DispatcherTimer _usageTimer;
     private bool _loadedOnce;
     private IReadOnlyList<CoreLoad>? _interruptLoads;
@@ -46,12 +46,21 @@ public sealed partial class AffinityViewModel : ObservableObject
 
     public ObservableCollection<HostControllerViewModel> Controllers { get; } = [];
 
-    public AffinityViewModel(InterruptAffinityService service, DeviceRestartService restartService, UsbTreeEnumerator treeEnumerator, InterruptDeviceEnumerator deviceEnumerator)
+    /// <param name="cpuUsageMonitor">Defaults to a real <see cref="CpuUsageMonitor"/> — overridable so
+    /// a test can substitute one that simulates a failed read without needing to actually break the
+    /// underlying syscall.</param>
+    public AffinityViewModel(
+        InterruptAffinityService service,
+        DeviceRestartService restartService,
+        UsbTreeEnumerator treeEnumerator,
+        InterruptDeviceEnumerator deviceEnumerator,
+        CpuUsageMonitor? cpuUsageMonitor = null)
     {
         _service = service;
         _restartService = restartService;
         _treeEnumerator = treeEnumerator;
         _deviceEnumerator = deviceEnumerator;
+        _cpuUsageMonitor = cpuUsageMonitor ?? new CpuUsageMonitor();
 
         _usageTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
         _usageTimer.Tick += (_, _) => RefreshCoreUsage();
@@ -93,9 +102,23 @@ public sealed partial class AffinityViewModel : ObservableObject
         }
     }
 
-    private void RefreshCoreUsage()
+    /// <summary>Internal rather than private so a test can drive it directly without waiting on
+    /// <see cref="_usageTimer"/>'s dispatcher tick — the logic under test doesn't depend on the timer,
+    /// only its trigger does.</summary>
+    internal void RefreshCoreUsage()
     {
         var usage = _cpuUsageMonitor.SampleUsagePercent();
+        if (usage is null)
+        {
+            // A failed read, or one with no baseline yet, must not be treated as "every core is
+            // idle" — leave whatever was last actually measured (or the initial "collecting data"
+            // state) on screen rather than overwrite it with zeros that look like a reading but
+            // aren't one. The advisor and the optimizer both already treat "no usage data" as
+            // license to fall back to interrupt-trace data or say so outright, so skipping this tick
+            // is enough; nothing downstream needs to be told about the failure specifically.
+            return;
+        }
+
         foreach (var controller in Controllers)
         {
             foreach (var core in controller.Cores)
