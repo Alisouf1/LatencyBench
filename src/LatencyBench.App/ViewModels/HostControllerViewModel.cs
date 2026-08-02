@@ -45,6 +45,14 @@ public sealed partial class HostControllerViewModel : ObservableObject
     [ObservableProperty]
     private string _coreAdvice = "Collecting core usage data…";
 
+    /// <summary>Guards Apply/ClearOverride/Restart against re-entry — set before the GPU restart
+    /// confirmation dialog is shown, specifically, since that <see cref="MessageBox"/> has no owner
+    /// window and so does not block clicks on this device's buttons while it's open. Without this, a
+    /// second click during the confirmation could stack another dialog or fire a second registry
+    /// write/restart concurrently with the first.</summary>
+    [ObservableProperty]
+    private bool _isBusy;
+
     private IReadOnlyList<double> _lastCoreUsagePercent = [];
     private IReadOnlyList<CoreLoad>? _lastInterruptLoads;
 
@@ -128,6 +136,11 @@ public sealed partial class HostControllerViewModel : ObservableObject
     /// <returns>true if the write succeeded; false if nothing was selected or the OS rejected the write (StatusMessage explains which).</returns>
     private bool TrySaveSelectedCores()
     {
+        if (IsBusy)
+        {
+            return false;
+        }
+
         var selected = Cores.Where(c => c.IsSelected).Select(c => c.Index).ToList();
         if (selected.Count == 0)
         {
@@ -135,6 +148,7 @@ public sealed partial class HostControllerViewModel : ObservableObject
             return false;
         }
 
+        IsBusy = true;
         try
         {
             _service.SetSpecifiedCores(InstanceId, selected);
@@ -150,11 +164,21 @@ public sealed partial class HostControllerViewModel : ObservableObject
             StatusMessage = $"Could not save: {ex.Message}";
             return false;
         }
+        finally
+        {
+            IsBusy = false;
+        }
     }
 
     [RelayCommand]
     private void ClearOverride()
     {
+        if (IsBusy)
+        {
+            return;
+        }
+
+        IsBusy = true;
         try
         {
             _service.ClearOverride(InstanceId);
@@ -173,6 +197,10 @@ public sealed partial class HostControllerViewModel : ObservableObject
         {
             StatusMessage = $"Could not clear: {ex.Message}";
         }
+        finally
+        {
+            IsBusy = false;
+        }
     }
 
     [RelayCommand]
@@ -182,22 +210,39 @@ public sealed partial class HostControllerViewModel : ObservableObject
     /// <returns>true if the device was actually restarted; false if the user declined the GPU confirmation prompt or the OS refused the restart (StatusMessage explains which).</returns>
     private bool TryRestartCore()
     {
-        if (DeviceRestartService.RequiresConfirmation(_restartCategory) && !ConfirmRiskyRestart())
+        if (IsBusy)
         {
             return false;
         }
 
+        // Set before the confirmation prompt below, not after — that MessageBox has no owner window,
+        // so it does not block clicks on this device's own buttons while it's open. Without the guard
+        // already active here, a second click during the prompt could stack another confirmation
+        // dialog or race a second restart against the first.
+        IsBusy = true;
         try
         {
-            _restartService.Restart(InstanceId);
-            StatusMessage = "Restarted — the change is live now. Re-run a port test or DPC/ISR trace to measure the difference.";
-            return true;
+            if (DeviceRestartService.RequiresConfirmation(_restartCategory) && !ConfirmRiskyRestart())
+            {
+                return false;
+            }
+
+            try
+            {
+                _restartService.Restart(InstanceId);
+                StatusMessage = "Restarted — the change is live now. Re-run a port test or DPC/ISR trace to measure the difference.";
+                return true;
+            }
+            catch (Exception ex)
+            {
+                // Surface the real OS error rather than a guess; a reboot still applies the change.
+                StatusMessage = $"Restart failed: {ex.Message}";
+                return false;
+            }
         }
-        catch (Exception ex)
+        finally
         {
-            // Surface the real OS error rather than a guess; a reboot still applies the change.
-            StatusMessage = $"Restart failed: {ex.Message}";
-            return false;
+            IsBusy = false;
         }
     }
 

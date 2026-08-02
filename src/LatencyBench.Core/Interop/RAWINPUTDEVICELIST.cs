@@ -2,7 +2,7 @@ namespace LatencyBench.Core.Interop;
 
 internal struct RAWINPUTDEVICELIST
 {
-	public nint hDevice;
+    public nint hDevice;
 
-	public uint dwType;
+    public uint dwType;
 }

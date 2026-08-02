@@ -1,0 +1,22 @@
+<Project>
+
+  <!--
+    Single source of truth for the app's version number. MSBuild automatically imports this file
+    into every project under this directory (LatencyBench.App, LatencyBench.Core,
+    LatencyBench.Tests), so bumping LatencyBenchVersion here is the only edit needed to change the
+    version every csproj-built assembly reports.
+
+    Two artifacts are NOT covered by this file, because neither is evaluated by MSBuild:
+      - src/LatencyBench.App/app.manifest (a static Win32 manifest merged into the exe's resources)
+      - installer/LatencyBench.iss (the Inno Setup installer script)
+    Both currently hardcode a matching version string with a comment pointing back here. Bumping
+    LatencyBenchVersion below must still be followed by a manual edit to those two files.
+  -->
+  <PropertyGroup>
+    <LatencyBenchVersion>1.0.0</LatencyBenchVersion>
+    <Version>$(LatencyBenchVersion)</Version>
+    <AssemblyVersion>$(LatencyBenchVersion).0</AssemblyVersion>
+    <FileVersion>$(LatencyBenchVersion).0</FileVersion>
+  </PropertyGroup>
+
+</Project>

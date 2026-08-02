@@ -1,0 +1,35 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!-- Matches LatencyBench.Core. The Core library targets net8.0-windows because it is built
+         almost entirely on Win32 interop, the registry and ETW, so the tests must too. -->
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+
+    <!-- The view smoke tests instantiate real WPF controls. XAML is parsed at runtime, so a missing
+         StaticResource, a bad DataTemplate or a mistyped converter key compiles cleanly and only
+         fails when the tab is opened — which is exactly the class of bug these tests catch. -->
+    <UseWPF>true</UseWPF>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="coverlet.collector" Version="6.0.0" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.8.0" />
+    <PackageReference Include="xunit" Version="2.5.3" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.5.3" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\LatencyBench.Core\LatencyBench.Core.csproj" />
+    <ProjectReference Include="..\..\src\LatencyBench.App\LatencyBench.App.csproj" />
+  </ItemGroup>
+
+</Project>

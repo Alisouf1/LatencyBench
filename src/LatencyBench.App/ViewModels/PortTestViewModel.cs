@@ -64,7 +64,7 @@ public sealed partial class PortTestViewModel : ObservableObject
     private double? _liveJitterMs;
 
     [ObservableProperty]
-    private double? _liveLatencyMs;
+    private double? _liveMedianReportIntervalMs;
 
     [ObservableProperty]
     private double? _livePollingRateHz;
@@ -244,7 +244,7 @@ public sealed partial class PortTestViewModel : ObservableObject
         IntervalHistogram.Clear();
         LiveSampleCount = 0;
         LiveJitterMs = null;
-        LiveLatencyMs = null;
+        LiveMedianReportIntervalMs = null;
         LivePollingRateHz = null;
         LiveIntervals.Clear();
         var hasMouse = SelectedDevice.MouseCollection is not null;
@@ -301,7 +301,7 @@ public sealed partial class PortTestViewModel : ObservableObject
 
                 var liveAnalysis = _engine.GetCurrentAnalysis();
                 LiveJitterMs = liveAnalysis?.JitterMs;
-                LiveLatencyMs = liveAnalysis?.ReportLatencyMs;
+                LiveMedianReportIntervalMs = liveAnalysis?.MedianReportIntervalMs;
                 LivePollingRateHz = liveAnalysis?.PollingRateHz;
             }
 
@@ -337,7 +337,7 @@ public sealed partial class PortTestViewModel : ObservableObject
         Comparison = PortComparisonGenerator.Compare(result.JitterMs, result.PortLocation, _historyStore.Results.ToList(), underLoad, isHighFrequency);
 
         IntervalHistogram.Clear();
-        foreach (var bucket in IntervalHistogramBuilder.Build(result.ActiveIntervalsMs, result.ReportLatencyMs))
+        foreach (var bucket in IntervalHistogramBuilder.Build(result.ActiveIntervalsMs, result.MedianReportIntervalMs))
         {
             IntervalHistogram.Add(bucket);
         }
@@ -365,7 +365,7 @@ public sealed partial class PortTestViewModel : ObservableObject
             PortLocation = result.PortLocation,
             Rank = rank,
             AverageJitterMs = result.JitterMs,
-            AverageLatencyMs = result.ReportLatencyMs,
+            AverageReportIntervalMs = result.MedianReportIntervalMs,
             PollingRateHz = (int)Math.Round(result.PollingRateHz),
             UnderLoad = _lastRunUnderLoad,
             HostControllerInstanceId = _lastRunHostControllerInstanceId,
@@ -383,7 +383,7 @@ public sealed partial class PortTestViewModel : ObservableObject
     /// </summary>
     private void RunDiagnosis(HidTestResult result, ConcurrentQueue<DpcIsrSample> traceSamples)
     {
-        var windows = _engine.GetReportWindows(result.ReportLatencyMs);
+        var windows = _engine.GetReportWindows(result.MedianReportIntervalMs);
         var spikes = traceSamples
             .Where(s => s.DurationMicroseconds >= SpikeThresholdMicroseconds)
             .Select(s => new SpikeEvent(s.Timestamp, s.DurationMicroseconds, s.DriverName))

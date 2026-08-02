@@ -9,12 +9,22 @@
         xmlns:controls="clr-namespace:LatencyBench.App.Controls"
         mc:Ignorable="d"
         Title="LatencyBench — by Alisouf" Height="760" Width="1080" MinHeight="560" MinWidth="820"
+        Icon="Assets/LatencyBench.ico"
         Background="{StaticResource WindowBackgroundBrush}"
         FontFamily="Segoe UI">
 
     <Window.Resources>
         <DataTemplate DataType="{x:Type vm:DashboardViewModel}">
             <views:DashboardView/>
+        </DataTemplate>
+        <DataTemplate DataType="{x:Type vm:OptimizeViewModel}">
+            <views:OptimizeView/>
+        </DataTemplate>
+        <DataTemplate DataType="{x:Type vm:ProcessTuningViewModel}">
+            <views:ProcessTuningView/>
+        </DataTemplate>
+        <DataTemplate DataType="{x:Type vm:MonitorViewModel}">
+            <views:MonitorView/>
         </DataTemplate>
         <DataTemplate DataType="{x:Type vm:MsiModeViewModel}">
             <views:MsiModeView/>
@@ -73,6 +83,13 @@
                         </StackPanel>
                     </RadioButton>
                     <RadioButton GroupName="Nav" Style="{StaticResource NavButtonStyle}"
+                                 IsChecked="{Binding CurrentSection, Converter={StaticResource EnumToBooleanConverter}, ConverterParameter=Optimize}">
+                        <StackPanel Orientation="Horizontal">
+                            <controls:Icon Kind="Advisor" IconBrush="{Binding Foreground, RelativeSource={RelativeSource AncestorType=RadioButton}}" Width="13" Height="13" Margin="0,0,6,0"/>
+                            <TextBlock Text="Optimize"/>
+                        </StackPanel>
+                    </RadioButton>
+                    <RadioButton GroupName="Nav" Style="{StaticResource NavButtonStyle}"
                                  IsChecked="{Binding CurrentSection, Converter={StaticResource EnumToBooleanConverter}, ConverterParameter=PortTest}">
                         <StackPanel Orientation="Horizontal">
                             <controls:Icon Kind="PortTest" IconBrush="{Binding Foreground, RelativeSource={RelativeSource AncestorType=RadioButton}}" Width="13" Height="13" Margin="0,0,6,0"/>
@@ -105,6 +122,20 @@
                         <StackPanel Orientation="Horizontal">
                             <controls:Icon Kind="Affinity" IconBrush="{Binding Foreground, RelativeSource={RelativeSource AncestorType=RadioButton}}" Width="13" Height="13" Margin="0,0,6,0"/>
                             <TextBlock Text="Affinity"/>
+                        </StackPanel>
+                    </RadioButton>
+                    <RadioButton GroupName="Nav" Style="{StaticResource NavButtonStyle}"
+                                 IsChecked="{Binding CurrentSection, Converter={StaticResource EnumToBooleanConverter}, ConverterParameter=Processes}">
+                        <StackPanel Orientation="Horizontal">
+                            <controls:Icon Kind="Cpu" IconBrush="{Binding Foreground, RelativeSource={RelativeSource AncestorType=RadioButton}}" Width="13" Height="13" Margin="0,0,6,0"/>
+                            <TextBlock Text="Processes"/>
+                        </StackPanel>
+                    </RadioButton>
+                    <RadioButton GroupName="Nav" Style="{StaticResource NavButtonStyle}"
+                                 IsChecked="{Binding CurrentSection, Converter={StaticResource EnumToBooleanConverter}, ConverterParameter=Monitor}">
+                        <StackPanel Orientation="Horizontal">
+                            <controls:Icon Kind="DpcIsr" IconBrush="{Binding Foreground, RelativeSource={RelativeSource AncestorType=RadioButton}}" Width="13" Height="13" Margin="0,0,6,0"/>
+                            <TextBlock Text="Monitor"/>
                         </StackPanel>
                     </RadioButton>
                     <RadioButton GroupName="Nav" Style="{StaticResource NavButtonStyle}"

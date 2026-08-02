@@ -88,9 +88,9 @@
                         <TextBlock Text="jitter (live)" Style="{StaticResource MutedText}"/>
                     </StackPanel>
                     <StackPanel Margin="8,0">
-                        <TextBlock Text="{Binding LiveLatencyMs, StringFormat='{}{0:0.00} ms', TargetNullValue='—'}"
+                        <TextBlock Text="{Binding LiveMedianReportIntervalMs, StringFormat='{}{0:0.00} ms', TargetNullValue='—'}"
                                    Style="{StaticResource BodyText}" FontWeight="Medium" FontSize="18"/>
-                        <TextBlock Text="report latency (live)" Style="{StaticResource MutedText}"/>
+                        <TextBlock Text="median report interval (live)" Style="{StaticResource MutedText}"/>
                     </StackPanel>
                     <StackPanel Margin="8,0,0,0">
                         <TextBlock Text="{Binding LivePollingRateHz, StringFormat='{}{0:0} Hz', TargetNullValue='—'}"
@@ -111,8 +111,8 @@
                         <TextBlock Text="{Binding JitterMs, StringFormat='{}{0:0.000} ms'}" Style="{StaticResource BodyText}" HorizontalAlignment="Right"/>
                     </DockPanel>
                     <DockPanel Margin="0,3">
-                        <TextBlock Text="Report latency" Style="{StaticResource SecondaryText}" DockPanel.Dock="Left"/>
-                        <TextBlock Text="{Binding ReportLatencyMs, StringFormat='{}{0:0.00} ms'}" Style="{StaticResource BodyText}" HorizontalAlignment="Right"/>
+                        <TextBlock Text="Median report interval" Style="{StaticResource SecondaryText}" DockPanel.Dock="Left"/>
+                        <TextBlock Text="{Binding MedianReportIntervalMs, StringFormat='{}{0:0.00} ms'}" Style="{StaticResource BodyText}" HorizontalAlignment="Right"/>
                     </DockPanel>
                     <DockPanel Margin="0,3">
                         <TextBlock Text="Polling rate" Style="{StaticResource SecondaryText}" DockPanel.Dock="Left"/>

@@ -2,7 +2,7 @@ namespace LatencyBench.Core.Tweaks.Models;
 
 public enum TweakState
 {
-	Unknown,
-	NotApplied,
-	Applied
+    Unknown,
+    NotApplied,
+    Applied
 }

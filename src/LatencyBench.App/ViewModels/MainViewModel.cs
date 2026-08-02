@@ -7,6 +7,8 @@ using LatencyBench.Core.Elevation;
 using LatencyBench.Core.Msi;
 using LatencyBench.Core.MouseTesting;
 using LatencyBench.Core.PortTesting;
+using LatencyBench.Core.Recommendations;
+using LatencyBench.Core.SystemInfo;
 using LatencyBench.Core.Tweaks;
 using LatencyBench.Core.UsbTree;
 
@@ -32,6 +34,25 @@ public sealed partial class MainViewModel : ObservableObject
 
     public MouseTestViewModel MouseTest { get; }
 
+    /// <summary>
+    /// The machine's hardware and Windows profile. Owned here and shared, because detection is the
+    /// input to everything that reasons about what this PC can actually benefit from, and running
+    /// it once per consumer would repeat a full device-tree enumeration each time.
+    /// </summary>
+    public SystemProfiler SystemProfiler { get; } = new();
+
+    /// <summary>
+    /// Analyses the machine and explains what is worth changing. Shares the one
+    /// <see cref="SystemProfiler"/> above rather than detecting again.
+    /// </summary>
+    public RecommendationService Recommendations { get; }
+
+    public OptimizeViewModel Optimize { get; }
+
+    public ProcessTuningViewModel Processes { get; }
+
+    public MonitorViewModel Monitor { get; }
+
     [ObservableProperty]
     private NavSection _currentSection = NavSection.Dashboard;
 
@@ -53,17 +74,31 @@ public sealed partial class MainViewModel : ObservableObject
         var treeEnumerator = new UsbTreeEnumerator();
         var historyStore = new PortTestHistoryStore();
         var restartService = new DeviceRestartService();
+        var interruptDeviceService = new InterruptDeviceService();
+        var affinityService = new InterruptAffinityService(treeEnumerator);
+        var traceHistory = new DpcIsrHistoryStore();
 
-        MsiMode = new MsiModeViewModel(new InterruptDeviceService(), restartService, new InterruptDeviceEnumerator(), treeEnumerator);
-        Affinity = new AffinityViewModel(new InterruptAffinityService(treeEnumerator), restartService, treeEnumerator, new InterruptDeviceEnumerator());
+        MsiMode = new MsiModeViewModel(interruptDeviceService, restartService, new InterruptDeviceEnumerator(), treeEnumerator);
+        Affinity = new AffinityViewModel(affinityService, restartService, treeEnumerator, new InterruptDeviceEnumerator());
         Tweaks = new TweaksViewModel(new TweakCatalog(), new RestorePointService());
         PortTest = new PortTestViewModel(historyStore, treeEnumerator);
-        DpcIsr = new DpcIsrViewModel(new DpcIsrHistoryStore(), new InterruptDeviceEnumerator());
+        DpcIsr = new DpcIsrViewModel(traceHistory, new InterruptDeviceEnumerator());
         MouseTest = new MouseTestViewModel(new MouseTestHistoryStore(), treeEnumerator);
         Dashboard = new DashboardViewModel(Affinity, DpcIsr, MsiMode, historyStore, treeEnumerator);
+        Recommendations = new RecommendationService(SystemProfiler);
+        // Shares the same trace history the DPC/ISR tab writes to, so a trace saved there immediately
+        // becomes evidence the analysis can use rather than a separate copy that never updates.
+        Optimize = new OptimizeViewModel(Recommendations, traceHistory, affinityService, interruptDeviceService);
+        Processes = new ProcessTuningViewModel(new LatencyBench.Core.Processes.ProcessTuner());
+        Monitor = new MonitorViewModel(new LatencyBench.Core.Monitoring.LatencyMonitor());
         CurrentViewModel = Dashboard;
 
         Affinity.LoadIfNeeded();
+
+        // Warmed in the background so the profile is already in hand by the time anything asks for
+        // it. Fire-and-forget is correct here: SystemProfiler collects its own probe failures as
+        // warnings rather than throwing, and nothing at startup blocks on the result.
+        _ = SystemProfiler.GetAsync();
     }
 
     /// <summary>Forward WM_INPUT from the window's message hook here — safe to call regardless of which tab is active, since each underlying capture engine only records while its own test is actually running (and self-filters by device handle), so forwarding to both unconditionally never cross-contaminates a run.</summary>
@@ -80,6 +115,7 @@ public sealed partial class MainViewModel : ObservableObject
     {
         Affinity.SetActive(false);
         DpcIsr.Dispose();
+        Monitor.Shutdown();
     }
 
     public void SetWindowHandle(IntPtr handle)
@@ -190,11 +226,14 @@ public sealed partial class MainViewModel : ObservableObject
         CurrentViewModel = value switch
         {
             NavSection.Dashboard => Dashboard,
+            NavSection.Optimize => Optimize,
             NavSection.PortTest => PortTest,
             NavSection.DpcIsr => DpcIsr,
             NavSection.MsiMode => MsiMode,
             NavSection.Affinity => Affinity,
             NavSection.Tweaks => Tweaks,
+            NavSection.Processes => Processes,
+            NavSection.Monitor => Monitor,
             NavSection.MouseTest => MouseTest,
             _ => Dashboard,
         };
@@ -225,6 +264,16 @@ public sealed partial class MainViewModel : ObservableObject
         {
             Tweaks.LoadIfNeeded();
         }
+        else if (value == NavSection.Optimize)
+        {
+            Optimize.LoadIfNeeded();
+        }
+        else if (value == NavSection.Processes)
+        {
+            Processes.LoadIfNeeded();
+        }
+        // Monitor has nothing to load — it stays idle until the user clicks Start, deliberately, so
+        // opening the tab never silently begins sampling.
         else if (value == NavSection.PortTest)
         {
             PortTest.LoadIfNeeded();

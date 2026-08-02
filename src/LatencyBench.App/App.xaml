@@ -38,6 +38,8 @@
             <conv:MsiToggleLabelConverter x:Key="MsiToggleLabelConverter"/>
             <conv:FindingSeverityToBrushConverter x:Key="FindingSeverityToBrushConverter"/>
             <conv:ChartPointsToPolylinePointsConverter x:Key="ChartPointsToPolylinePointsConverter"/>
+            <conv:PercentSeriesToPolylinePointsConverter x:Key="PercentSeriesToPolylinePointsConverter"/>
+            <conv:WarningSeverityToBrushConverter x:Key="WarningSeverityToBrushConverter"/>
         </ResourceDictionary>
     </Application.Resources>
 </Application>

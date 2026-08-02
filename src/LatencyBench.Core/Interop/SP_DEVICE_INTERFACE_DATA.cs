@@ -4,11 +4,11 @@ namespace LatencyBench.Core.Interop;
 
 internal struct SP_DEVICE_INTERFACE_DATA
 {
-	public uint cbSize;
+    public uint cbSize;
 
-	public Guid InterfaceClassGuid;
+    public Guid InterfaceClassGuid;
 
-	public uint Flags;
+    public uint Flags;
 
-	public nint Reserved;
+    public nint Reserved;
 }

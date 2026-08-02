@@ -1,64 +1,118 @@
 using System;
 using System.Collections.Generic;
-using System.Linq;
 
 namespace LatencyBench.Core.HidTesting;
 
 public static class JitterLatencyAnalyzer
 {
-	public readonly record struct AnalysisResult(int SampleCount, double PollingRateHz, double JitterMs, double ReportLatencyMs, double EffectivePollingRateHz, double LateReportPercent, IReadOnlyList<double> ActiveIntervalsMs);
+    /// <param name="MedianReportIntervalMs">
+    /// The median time between consecutive received reports — NOT end-to-end input latency. There is
+    /// no independent timestamp for the physical input event (button press / motion), only the
+    /// arrival time of each report, so this can only measure spacing between reports, never how long
+    /// a report took to arrive after the action that produced it.
+    /// </param>
+    public readonly record struct AnalysisResult(int SampleCount, double PollingRateHz, double JitterMs, double MedianReportIntervalMs, double EffectivePollingRateHz, double LateReportPercent, IReadOnlyList<double> ActiveIntervalsMs);
 
-	public const double IdleGapMultiplier = 10.0;
+    /// <summary>An interval longer than this multiple of the median is the user pausing, not the
+    /// device being late, and is excluded from every statistic.</summary>
+    public const double IdleGapMultiplier = 10.0;
 
-	public const double LateReportMultiplier = 1.5;
+    /// <summary>An interval longer than this multiple of the median counts as a late report.</summary>
+    public const double LateReportMultiplier = 1.5;
 
-	public const double BurstArtifactMultiplier = 0.5;
+    /// <summary>An interval shorter than this multiple of the median is a coalescing artifact — two
+    /// reports delivered back to back after the driver batched them — not a genuinely faster poll.</summary>
+    public const double BurstArtifactMultiplier = 0.5;
 
-	public static AnalysisResult? Analyze(IReadOnlyList<long> timestampTicks, double ticksPerMillisecond)
-	{
-		if (timestampTicks.Count < 3 || ticksPerMillisecond <= 0.0)
-		{
-			return null;
-		}
-		List<double> list = new List<double>(timestampTicks.Count - 1);
-		for (int i = 1; i < timestampTicks.Count; i++)
-		{
-			long num = timestampTicks[i] - timestampTicks[i - 1];
-			if (num > 0)
-			{
-				list.Add((double)num / ticksPerMillisecond);
-			}
-		}
-		if (list.Count == 0)
-		{
-			return null;
-		}
-		double medianMs = Median(list);
-		List<double> list2 = list.Where((double v) => v <= medianMs * 2.0).ToList();
-		if (list2.Count == 0)
-		{
-			list2 = list;
-		}
-		double mean = list2.Average();
-		double d = list2.Select((double v) => (v - mean) * (v - mean)).Average();
-		double jitterMs = Math.Sqrt(d);
-		double pollingRateHz = ((medianMs > 0.0) ? (1000.0 / medianMs) : 0.0);
-		List<double> list3 = list.Where((double v) => v >= medianMs * 0.5 && v <= medianMs * 10.0).ToList();
-		if (list3.Count == 0)
-		{
-			list3 = list;
-		}
-		double num2 = list3.Average();
-		double effectivePollingRateHz = ((num2 > 0.0) ? (1000.0 / num2) : 0.0);
-		int num3 = list3.Count((double v) => v > medianMs * 1.5);
-		double lateReportPercent = 100.0 * (double)num3 / (double)list3.Count;
-		return new AnalysisResult(timestampTicks.Count, pollingRateHz, jitterMs, medianMs, effectivePollingRateHz, lateReportPercent, list3);
-	}
+    public static AnalysisResult? Analyze(IReadOnlyList<long> timestampTicks, double ticksPerMillisecond)
+    {
+        if (timestampTicks.Count < 3 || ticksPerMillisecond <= 0.0)
+        {
+            return null;
+        }
 
-	private static double Median(List<double> values)
-	{
-		List<double> list = values.OrderBy((double v) => v).ToList();
-		int num = list.Count / 2;
-		return (list.Count % 2 == 0) ? ((list[num - 1] + list[num]) / 2.0) : list[num];
-	}
+        var intervals = new List<double>(timestampTicks.Count - 1);
+        for (int i = 1; i < timestampTicks.Count; i++)
+        {
+            long delta = timestampTicks[i] - timestampTicks[i - 1];
+            if (delta > 0)
+            {
+                intervals.Add((double)delta / ticksPerMillisecond);
+            }
+        }
+
+        if (intervals.Count == 0)
+        {
+            return null;
+        }
+
+        double medianMs = Median(intervals);
+        if (medianMs <= 0.0)
+        {
+            return null;
+        }
+
+        // One band, used for every statistic below. Previously jitter used its own band that had an
+        // upper bound but no lower bound, so the sub-median burst artifacts this band exists to
+        // exclude were still fed into the standard deviation and inflated the reported jitter — the
+        // BurstArtifactMultiplier constant was declared for exactly this and then never applied.
+        double lowerBound = medianMs * BurstArtifactMultiplier;
+        double upperBound = medianMs * IdleGapMultiplier;
+
+        var active = new List<double>(intervals.Count);
+        foreach (double interval in intervals)
+        {
+            if (interval >= lowerBound && interval <= upperBound)
+            {
+                active.Add(interval);
+            }
+        }
+
+        if (active.Count == 0)
+        {
+            active = intervals;
+        }
+
+        double mean = 0.0;
+        foreach (double interval in active)
+        {
+            mean += interval;
+        }
+
+        mean /= active.Count;
+
+        double sumOfSquares = 0.0;
+        int lateCount = 0;
+        double lateThreshold = medianMs * LateReportMultiplier;
+        foreach (double interval in active)
+        {
+            double deviation = interval - mean;
+            sumOfSquares += deviation * deviation;
+            if (interval > lateThreshold)
+            {
+                lateCount++;
+            }
+        }
+
+        double jitterMs = Math.Sqrt(sumOfSquares / active.Count);
+        double pollingRateHz = 1000.0 / medianMs;
+        double effectivePollingRateHz = (mean > 0.0) ? (1000.0 / mean) : 0.0;
+        double lateReportPercent = 100.0 * lateCount / active.Count;
+
+        return new AnalysisResult(timestampTicks.Count, pollingRateHz, jitterMs, medianMs, effectivePollingRateHz, lateReportPercent, active);
+    }
+
+    /// <summary>
+    /// Sorts a scratch copy in place rather than building a LINQ-ordered sequence and materialising it.
+    /// This runs on every live refresh while a test is in progress, so it is on the app's own hot path.
+    /// </summary>
+    private static double Median(List<double> values)
+    {
+        double[] scratch = values.ToArray();
+        Array.Sort(scratch);
+        int middle = scratch.Length / 2;
+        return (scratch.Length % 2 == 0)
+            ? ((scratch[middle - 1] + scratch[middle]) / 2.0)
+            : scratch[middle];
+    }
 }
