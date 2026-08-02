@@ -4,11 +4,11 @@ namespace LatencyBench.Core.Tweaks;
 
 public interface ITweak
 {
-	TweakDefinition Definition { get; }
+    TweakDefinition Definition { get; }
 
-	TweakState GetState();
+    TweakState GetState();
 
-	void Apply();
+    void Apply();
 
-	void Revert();
+    void Revert();
 }

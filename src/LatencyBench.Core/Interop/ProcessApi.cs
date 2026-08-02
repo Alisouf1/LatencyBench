@@ -10,27 +10,27 @@ namespace LatencyBench.Core.Interop;
 /// </summary>
 internal static class ProcessApi
 {
-	/// <summary>PROCESSINFOCLASS.ProcessIoPriority.</summary>
-	internal const int ProcessIoPriority = 33;
+    /// <summary>PROCESSINFOCLASS.ProcessIoPriority.</summary>
+    internal const int ProcessIoPriority = 33;
 
-	[DllImport("ntdll.dll")]
-	internal static extern int NtQueryInformationProcess(
-		nint processHandle,
-		int processInformationClass,
-		ref int processInformation,
-		int processInformationLength,
-		out int returnLength);
+    [DllImport("ntdll.dll")]
+    internal static extern int NtQueryInformationProcess(
+        nint processHandle,
+        int processInformationClass,
+        ref int processInformation,
+        int processInformationLength,
+        out int returnLength);
 
-	[DllImport("ntdll.dll")]
-	internal static extern int NtSetInformationProcess(
-		nint processHandle,
-		int processInformationClass,
-		ref int processInformation,
-		int processInformationLength);
+    [DllImport("ntdll.dll")]
+    internal static extern int NtSetInformationProcess(
+        nint processHandle,
+        int processInformationClass,
+        ref int processInformation,
+        int processInformationLength);
 
-	/// <summary>Converts an NTSTATUS into the Win32 error the rest of the framework understands.</summary>
-	[DllImport("ntdll.dll")]
-	internal static extern int RtlNtStatusToDosError(int status);
+    /// <summary>Converts an NTSTATUS into the Win32 error the rest of the framework understands.</summary>
+    [DllImport("ntdll.dll")]
+    internal static extern int RtlNtStatusToDosError(int status);
 
-	internal const int StatusSuccess = 0;
+    internal const int StatusSuccess = 0;
 }

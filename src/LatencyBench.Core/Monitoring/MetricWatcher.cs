@@ -24,68 +24,68 @@ namespace LatencyBench.Core.Monitoring;
 /// </summary>
 public sealed class MetricWatcher
 {
-	private readonly WarningMetric _metric;
-	private readonly double _raiseThreshold;
-	private readonly double _clearThreshold;
-	private readonly int _consecutiveToRaise;
-	private readonly int _consecutiveToClear;
-	private readonly WarningSeverity _severity;
-	private readonly Func<double, string> _describeRaise;
-	private readonly Func<double, string> _describeClear;
+    private readonly WarningMetric _metric;
+    private readonly double _raiseThreshold;
+    private readonly double _clearThreshold;
+    private readonly int _consecutiveToRaise;
+    private readonly int _consecutiveToClear;
+    private readonly WarningSeverity _severity;
+    private readonly Func<double, string> _describeRaise;
+    private readonly Func<double, string> _describeClear;
 
-	private int _overCount;
-	private int _underCount;
+    private int _overCount;
+    private int _underCount;
 
-	public bool IsAlarmed { get; private set; }
+    public bool IsAlarmed { get; private set; }
 
-	public MetricWatcher(
-		WarningMetric metric,
-		double raiseThreshold,
-		double clearThreshold,
-		int consecutiveToRaise,
-		int consecutiveToClear,
-		WarningSeverity severity,
-		Func<double, string> describeRaise,
-		Func<double, string> describeClear)
-	{
-		_metric = metric;
-		_raiseThreshold = raiseThreshold;
-		_clearThreshold = clearThreshold;
-		_consecutiveToRaise = Math.Max(1, consecutiveToRaise);
-		_consecutiveToClear = Math.Max(1, consecutiveToClear);
-		_severity = severity;
-		_describeRaise = describeRaise;
-		_describeClear = describeClear;
-	}
+    public MetricWatcher(
+        WarningMetric metric,
+        double raiseThreshold,
+        double clearThreshold,
+        int consecutiveToRaise,
+        int consecutiveToClear,
+        WarningSeverity severity,
+        Func<double, string> describeRaise,
+        Func<double, string> describeClear)
+    {
+        _metric = metric;
+        _raiseThreshold = raiseThreshold;
+        _clearThreshold = clearThreshold;
+        _consecutiveToRaise = Math.Max(1, consecutiveToRaise);
+        _consecutiveToClear = Math.Max(1, consecutiveToClear);
+        _severity = severity;
+        _describeRaise = describeRaise;
+        _describeClear = describeClear;
+    }
 
-	/// <summary>Feeds one reading in. Returns a warning only on the sample that actually crosses a
-	/// debounced boundary — every other sample returns null, including every sample while already
-	/// alarmed and still over threshold.</summary>
-	public MonitoringWarning? Observe(double value, DateTimeOffset timestamp)
-	{
-		if (!IsAlarmed)
-		{
-			_overCount = value >= _raiseThreshold ? _overCount + 1 : 0;
+    /// <summary>Feeds one reading in. Returns a warning only on the sample that actually crosses a
+    /// debounced boundary — every other sample returns null, including every sample while already
+    /// alarmed and still over threshold.</summary>
+    public MonitoringWarning? Observe(double value, DateTimeOffset timestamp)
+    {
+        if (!IsAlarmed)
+        {
+            _overCount = value >= _raiseThreshold ? _overCount + 1 : 0;
 
-			if (_overCount < _consecutiveToRaise)
-			{
-				return null;
-			}
+            if (_overCount < _consecutiveToRaise)
+            {
+                return null;
+            }
 
-			IsAlarmed = true;
-			_underCount = 0;
-			return new MonitoringWarning(timestamp, _metric, _severity, _describeRaise(value), IsRecovery: false);
-		}
+            IsAlarmed = true;
+            _underCount = 0;
+            return new MonitoringWarning(timestamp, _metric, _severity, _describeRaise(value), IsRecovery: false);
+        }
 
-		_underCount = value <= _clearThreshold ? _underCount + 1 : 0;
+        _underCount = value <= _clearThreshold ? _underCount + 1 : 0;
 
-		if (_underCount < _consecutiveToClear)
-		{
-			return null;
-		}
+        if (_underCount < _consecutiveToClear)
+        {
+            return null;
+        }
 
-		IsAlarmed = false;
-		_overCount = 0;
-		return new MonitoringWarning(timestamp, _metric, WarningSeverity.Info, _describeClear(value), IsRecovery: true);
-	}
+        IsAlarmed = false;
+        _overCount = 0;
+        return new MonitoringWarning(timestamp, _metric, WarningSeverity.Info, _describeClear(value), IsRecovery: true);
+    }
 }

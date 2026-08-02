@@ -9,17 +9,17 @@ namespace LatencyBench.Core.Interop;
 /// </summary>
 internal static class TimerApi
 {
-	/// <summary>
-	/// All three values come back in 100-nanosecond units. A "1 ms timer" is 10000.
-	/// <para>
-	/// Note the naming is the opposite of what it looks like: MinimumResolution is the coarsest
-	/// interval (the largest number, normally 156250 = 15.625 ms) and MaximumResolution is the
-	/// finest (the smallest number, normally 5000 = 0.5 ms).
-	/// </para>
-	/// </summary>
-	[DllImport("ntdll.dll")]
-	internal static extern int NtQueryTimerResolution(
-		out uint minimumResolution,
-		out uint maximumResolution,
-		out uint currentResolution);
+    /// <summary>
+    /// All three values come back in 100-nanosecond units. A "1 ms timer" is 10000.
+    /// <para>
+    /// Note the naming is the opposite of what it looks like: MinimumResolution is the coarsest
+    /// interval (the largest number, normally 156250 = 15.625 ms) and MaximumResolution is the
+    /// finest (the smallest number, normally 5000 = 0.5 ms).
+    /// </para>
+    /// </summary>
+    [DllImport("ntdll.dll")]
+    internal static extern int NtQueryTimerResolution(
+        out uint minimumResolution,
+        out uint maximumResolution,
+        out uint currentResolution);
 }

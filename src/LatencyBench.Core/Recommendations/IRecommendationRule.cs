@@ -13,11 +13,11 @@ namespace LatencyBench.Core.Recommendations;
 /// </summary>
 public interface IRecommendationRule
 {
-	/// <summary>Stable identifier, also used as the recommendation id and in conflict declarations.</summary>
-	string Id { get; }
+    /// <summary>Stable identifier, also used as the recommendation id and in conflict declarations.</summary>
+    string Id { get; }
 
-	/// <summary>Short human-readable name, shown even when the rule does not fire.</summary>
-	string Title { get; }
+    /// <summary>Short human-readable name, shown even when the rule does not fire.</summary>
+    string Title { get; }
 
-	RuleOutcome Evaluate(RecommendationContext context);
+    RuleOutcome Evaluate(RecommendationContext context);
 }

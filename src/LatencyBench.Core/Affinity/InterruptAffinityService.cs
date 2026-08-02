@@ -11,9 +11,9 @@ namespace LatencyBench.Core.Affinity;
 /// </summary>
 public sealed class InterruptAffinityService : IDisposable
 {
-	private const string ProcessorGroupUnsupportedMessage =
-		"Interrupt affinity is unavailable on this PC because it has more than 64 logical processors. " +
-		"LatencyBench does not yet support Windows processor groups, so it will not write a partial affinity mask.";
+    private const string ProcessorGroupUnsupportedMessage =
+        "Interrupt affinity is unavailable on this PC because it has more than 64 logical processors. " +
+        "LatencyBench does not yet support Windows processor groups, so it will not write a partial affinity mask.";
     private const string AffinityPolicyRelativePath = @"Device Parameters\Interrupt Management\Affinity Policy";
     private const string DeviceParametersRelativePath = "Device Parameters";
 
@@ -53,7 +53,7 @@ public sealed class InterruptAffinityService : IDisposable
 
     public IReadOnlyList<HostControllerInfo> ListHostControllers()
     {
-		EnsureProcessorGroupSupport();
+        EnsureProcessorGroupSupport();
         var processorCount = Environment.ProcessorCount;
         return _treeEnumerator.EnumerateHostControllers()
             .Select(node => ReadCurrentPolicy(node.InstanceId, node.FriendlyName, processorCount))
@@ -62,14 +62,14 @@ public sealed class InterruptAffinityService : IDisposable
 
     /// <summary>Same registry-backed policy read as <see cref="ListHostControllers"/>, for devices outside the USB tree (GPU, storage controller, audio) that come from <see cref="Msi.InterruptDeviceEnumerator"/> instead.</summary>
     public HostControllerInfo ReadPolicy(string instanceId, string friendlyName) =>
-		ReadPolicyAfterCheckingSupport(instanceId, friendlyName);
+        ReadPolicyAfterCheckingSupport(instanceId, friendlyName);
 
     public void SetSpecifiedCores(string instanceId, IEnumerable<int> coreIndices, InterruptPriority priority = InterruptPriority.High)
     {
-		EnsureProcessorGroupSupport();
+        EnsureProcessorGroupSupport();
 
-		var cores = coreIndices as IReadOnlyList<int> ?? coreIndices.ToList();
-		ValidateCoreSelection(cores, priority);
+        var cores = coreIndices as IReadOnlyList<int> ?? coreIndices.ToList();
+        ValidateCoreSelection(cores, priority);
         var mask = AffinityMask.FromCoreIndices(cores);
 
         using var instanceKey = _enumRoot.OpenSubKey(instanceId, writable: true)
@@ -82,48 +82,48 @@ public sealed class InterruptAffinityService : IDisposable
         policyKey.SetValue("AssignmentSetOverride", AffinityMask.ToBytes(mask), RegistryValueKind.Binary);
     }
 
-	/// <summary>
-	/// Rejects the two ways a caller can produce a policy that Windows will honour but the user did
-	/// not intend, both of which the registry itself will accept without complaint.
-	/// </summary>
-	private static void ValidateCoreSelection(IReadOnlyList<int> cores, InterruptPriority priority)
-	{
-		// An empty selection writes DevicePolicy=SpecifiedProcessors together with an all-zero
-		// AssignmentSetOverride: a device told to target the specified processors, with no processor
-		// specified. There is no way to express "no core" meaningfully, and the device's interrupts
-		// have nowhere valid to land. Clearing the override is the operation the caller actually wants.
-		if (cores.Count == 0)
-		{
-			throw new ArgumentException(
-				"An interrupt affinity policy needs at least one core. To remove a device's affinity " +
-				"policy, clear the override instead of applying an empty selection.",
-				nameof(cores));
-		}
+    /// <summary>
+    /// Rejects the two ways a caller can produce a policy that Windows will honour but the user did
+    /// not intend, both of which the registry itself will accept without complaint.
+    /// </summary>
+    private static void ValidateCoreSelection(IReadOnlyList<int> cores, InterruptPriority priority)
+    {
+        // An empty selection writes DevicePolicy=SpecifiedProcessors together with an all-zero
+        // AssignmentSetOverride: a device told to target the specified processors, with no processor
+        // specified. There is no way to express "no core" meaningfully, and the device's interrupts
+        // have nowhere valid to land. Clearing the override is the operation the caller actually wants.
+        if (cores.Count == 0)
+        {
+            throw new ArgumentException(
+                "An interrupt affinity policy needs at least one core. To remove a device's affinity " +
+                "policy, clear the override instead of applying an empty selection.",
+                nameof(cores));
+        }
 
-		// AffinityMask allows bits 0-63 because that is the width of the mask, not because this
-		// machine has that many processors. Pinning a device to a core that does not exist is a
-		// configuration the user can never benefit from and may stop the device receiving interrupts.
-		var processorCount = Environment.ProcessorCount;
-		foreach (var core in cores)
-		{
-			if (core < 0 || core >= processorCount)
-			{
-				throw new ArgumentOutOfRangeException(
-					nameof(cores),
-					core,
-					$"This PC has {processorCount} logical processors, so core {core} does not exist.");
-			}
-		}
+        // AffinityMask allows bits 0-63 because that is the width of the mask, not because this
+        // machine has that many processors. Pinning a device to a core that does not exist is a
+        // configuration the user can never benefit from and may stop the device receiving interrupts.
+        var processorCount = Environment.ProcessorCount;
+        foreach (var core in cores)
+        {
+            if (core < 0 || core >= processorCount)
+            {
+                throw new ArgumentOutOfRangeException(
+                    nameof(cores),
+                    core,
+                    $"This PC has {processorCount} logical processors, so core {core} does not exist.");
+            }
+        }
 
-		if (!Enum.IsDefined(typeof(InterruptPriority), priority))
-		{
-			throw new ArgumentOutOfRangeException(nameof(priority), priority, "Unknown interrupt priority.");
-		}
-	}
+        if (!Enum.IsDefined(typeof(InterruptPriority), priority))
+        {
+            throw new ArgumentOutOfRangeException(nameof(priority), priority, "Unknown interrupt priority.");
+        }
+    }
 
     public void ClearOverride(string instanceId)
     {
-		EnsureProcessorGroupSupport();
+        EnsureProcessorGroupSupport();
         using var instanceKey = _enumRoot.OpenSubKey(instanceId, writable: true)
             ?? throw new InvalidOperationException($"Device instance '{instanceId}' was not found, or this process is not elevated.");
         using var deviceParamsKey = instanceKey.OpenSubKey(DeviceParametersRelativePath, writable: true);
@@ -163,17 +163,17 @@ public sealed class InterruptAffinityService : IDisposable
         return info;
     }
 
-	private HostControllerInfo ReadPolicyAfterCheckingSupport(string instanceId, string friendlyName)
-	{
-		EnsureProcessorGroupSupport();
-		return ReadCurrentPolicy(instanceId, friendlyName, Environment.ProcessorCount);
-	}
+    private HostControllerInfo ReadPolicyAfterCheckingSupport(string instanceId, string friendlyName)
+    {
+        EnsureProcessorGroupSupport();
+        return ReadCurrentPolicy(instanceId, friendlyName, Environment.ProcessorCount);
+    }
 
-	private static void EnsureProcessorGroupSupport()
-	{
-		if (Environment.ProcessorCount > AffinityMask.MaxCores)
-		{
-			throw new NotSupportedException(ProcessorGroupUnsupportedMessage);
-		}
-	}
+    private static void EnsureProcessorGroupSupport()
+    {
+        if (Environment.ProcessorCount > AffinityMask.MaxCores)
+        {
+            throw new NotSupportedException(ProcessorGroupUnsupportedMessage);
+        }
+    }
 }

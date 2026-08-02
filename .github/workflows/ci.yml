@@ -1,0 +1,33 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  build-test-lint:
+    # WPF (net8.0-windows, UseWPF=true) can only build and run its WPF-instantiating tests on Windows.
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 8 SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      # Fast and cheap, so it runs before the build/test/format steps below rather than after them.
+      - name: Verify version is in sync (Directory.Build.props / installer script / app manifest)
+        shell: pwsh
+        run: ./tools/verify-version-sync.ps1
+
+      - name: Build (Release)
+        run: dotnet build -c Release
+
+      - name: Test
+        run: dotnet test
+
+      - name: Verify formatting
+        run: dotnet format --verify-no-changes

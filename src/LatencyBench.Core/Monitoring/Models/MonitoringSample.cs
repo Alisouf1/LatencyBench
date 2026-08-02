@@ -4,24 +4,24 @@ namespace LatencyBench.Core.Monitoring.Models;
 
 /// <summary>One reading of the machine's latency-relevant load.</summary>
 public sealed record MonitoringSample(
-	DateTimeOffset Timestamp,
-	double InterruptTimePercent,
-	double DpcTimePercent,
-	double ProcessorTimePercent,
-	double AvailableMemoryPercent);
+    DateTimeOffset Timestamp,
+    double InterruptTimePercent,
+    double DpcTimePercent,
+    double ProcessorTimePercent,
+    double AvailableMemoryPercent);
 
 public enum WarningSeverity
 {
-	Info,
-	Warning,
-	Critical
+    Info,
+    Warning,
+    Critical
 }
 
 public enum WarningMetric
 {
-	DpcTime,
-	InterruptTime,
-	MemoryPressure
+    DpcTime,
+    InterruptTime,
+    MemoryPressure
 }
 
 /// <summary>
@@ -30,8 +30,8 @@ public enum WarningMetric
 /// the user to ignore the panel.
 /// </summary>
 public sealed record MonitoringWarning(
-	DateTimeOffset Timestamp,
-	WarningMetric Metric,
-	WarningSeverity Severity,
-	string Message,
-	bool IsRecovery);
+    DateTimeOffset Timestamp,
+    WarningMetric Metric,
+    WarningSeverity Severity,
+    string Message,
+    bool IsRecovery);

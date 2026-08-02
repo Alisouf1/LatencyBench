@@ -4,7 +4,7 @@ namespace LatencyBench.Core.Interop;
 
 internal struct DEVPROPKEY
 {
-	public Guid fmtid;
+    public Guid fmtid;
 
-	public uint pid;
+    public uint pid;
 }

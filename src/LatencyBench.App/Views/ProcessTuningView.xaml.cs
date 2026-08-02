@@ -4,8 +4,8 @@ namespace LatencyBench.App.Views;
 
 public partial class ProcessTuningView : UserControl
 {
-	public ProcessTuningView()
-	{
-		InitializeComponent();
-	}
+    public ProcessTuningView()
+    {
+        InitializeComponent();
+    }
 }

@@ -17,146 +17,146 @@ namespace LatencyBench.Core.Tweaks;
 /// </summary>
 public sealed class TweakBackupStore
 {
-	private readonly string _filePath;
+    private readonly string _filePath;
 
-	private readonly object _gate = new object();
+    private readonly object _gate = new object();
 
-	/// <summary>
-	/// In-memory mirror of the file, loaded once. Every previous read went to disk — including one
-	/// full file read per <see cref="TryGet"/> — which put a JSON parse on the UI thread for every
-	/// tweak on every refresh.
-	/// </summary>
-	private Dictionary<string, string>? _cache;
+    /// <summary>
+    /// In-memory mirror of the file, loaded once. Every previous read went to disk — including one
+    /// full file read per <see cref="TryGet"/> — which put a JSON parse on the UI thread for every
+    /// tweak on every refresh.
+    /// </summary>
+    private Dictionary<string, string>? _cache;
 
-	public TweakBackupStore()
-		: this(Path.Combine(
-			Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-			"LatencyBench",
-			"tweak-backups.json"))
-	{
-	}
+    public TweakBackupStore()
+        : this(Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "LatencyBench",
+            "tweak-backups.json"))
+    {
+    }
 
-	public TweakBackupStore(string filePath)
-	{
-		_filePath = filePath;
-		Directory.CreateDirectory(Path.GetDirectoryName(filePath)!);
-	}
+    public TweakBackupStore(string filePath)
+    {
+        _filePath = filePath;
+        Directory.CreateDirectory(Path.GetDirectoryName(filePath)!);
+    }
 
-	public void Save(string key, string value)
-	{
-		lock (_gate)
-		{
-			Dictionary<string, string> data = LoadLocked();
-			data[key] = value;
-			PersistLocked(data);
-		}
-	}
+    public void Save(string key, string value)
+    {
+        lock (_gate)
+        {
+            Dictionary<string, string> data = LoadLocked();
+            data[key] = value;
+            PersistLocked(data);
+        }
+    }
 
-	public string? TryGet(string key)
-	{
-		lock (_gate)
-		{
-			return LoadLocked().GetValueOrDefault(key);
-		}
-	}
+    public string? TryGet(string key)
+    {
+        lock (_gate)
+        {
+            return LoadLocked().GetValueOrDefault(key);
+        }
+    }
 
-	public void Remove(string key)
-	{
-		lock (_gate)
-		{
-			Dictionary<string, string> data = LoadLocked();
-			if (data.Remove(key))
-			{
-				PersistLocked(data);
-			}
-		}
-	}
+    public void Remove(string key)
+    {
+        lock (_gate)
+        {
+            Dictionary<string, string> data = LoadLocked();
+            if (data.Remove(key))
+            {
+                PersistLocked(data);
+            }
+        }
+    }
 
-	/// <summary>Every recorded backup, for the restore-everything path and for showing the user what
-	/// is currently reversible.</summary>
-	public IReadOnlyDictionary<string, string> GetAll()
-	{
-		lock (_gate)
-		{
-			return new Dictionary<string, string>(LoadLocked());
-		}
-	}
+    /// <summary>Every recorded backup, for the restore-everything path and for showing the user what
+    /// is currently reversible.</summary>
+    public IReadOnlyDictionary<string, string> GetAll()
+    {
+        lock (_gate)
+        {
+            return new Dictionary<string, string>(LoadLocked());
+        }
+    }
 
-	private Dictionary<string, string> LoadLocked()
-	{
-		if (_cache is not null)
-		{
-			return _cache;
-		}
+    private Dictionary<string, string> LoadLocked()
+    {
+        if (_cache is not null)
+        {
+            return _cache;
+        }
 
-		if (!File.Exists(_filePath))
-		{
-			_cache = new Dictionary<string, string>();
-			return _cache;
-		}
+        if (!File.Exists(_filePath))
+        {
+            _cache = new Dictionary<string, string>();
+            return _cache;
+        }
 
-		string json;
-		try
-		{
-			json = File.ReadAllText(_filePath);
-		}
-		catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-		{
-			// Refusing to continue is the safe outcome. Returning an empty dictionary here — which is
-			// what this used to do for malformed JSON — makes every Revert silently do nothing while
-			// reporting success, which is far worse than surfacing the failure.
-			throw new InvalidOperationException(
-				$"The tweak backup file at {_filePath} could not be read, so reverting is not safe right now. " +
-				"Close any other copy of LatencyBench and try again.", ex);
-		}
+        string json;
+        try
+        {
+            json = File.ReadAllText(_filePath);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            // Refusing to continue is the safe outcome. Returning an empty dictionary here — which is
+            // what this used to do for malformed JSON — makes every Revert silently do nothing while
+            // reporting success, which is far worse than surfacing the failure.
+            throw new InvalidOperationException(
+                $"The tweak backup file at {_filePath} could not be read, so reverting is not safe right now. " +
+                "Close any other copy of LatencyBench and try again.", ex);
+        }
 
-		try
-		{
-			_cache = JsonSerializer.Deserialize<Dictionary<string, string>>(json) ?? new Dictionary<string, string>();
-		}
-		catch (JsonException ex)
-		{
-			// A corrupt file is preserved rather than overwritten: it is the only record of the user's
-			// original settings and may still be recoverable by hand.
-			string quarantine = _filePath + ".corrupt-" + DateTime.UtcNow.ToString("yyyyMMddHHmmss");
-			TryQuarantine(quarantine);
-			throw new InvalidOperationException(
-				$"The tweak backup file was corrupt and has been kept at {quarantine}. " +
-				"LatencyBench cannot revert previously applied tweaks until it is restored or removed.", ex);
-		}
+        try
+        {
+            _cache = JsonSerializer.Deserialize<Dictionary<string, string>>(json) ?? new Dictionary<string, string>();
+        }
+        catch (JsonException ex)
+        {
+            // A corrupt file is preserved rather than overwritten: it is the only record of the user's
+            // original settings and may still be recoverable by hand.
+            string quarantine = _filePath + ".corrupt-" + DateTime.UtcNow.ToString("yyyyMMddHHmmss");
+            TryQuarantine(quarantine);
+            throw new InvalidOperationException(
+                $"The tweak backup file was corrupt and has been kept at {quarantine}. " +
+                "LatencyBench cannot revert previously applied tweaks until it is restored or removed.", ex);
+        }
 
-		return _cache;
-	}
+        return _cache;
+    }
 
-	private void TryQuarantine(string destination)
-	{
-		try
-		{
-			File.Move(_filePath, destination, overwrite: false);
-		}
-		catch (Exception)
-		{
-			// Best effort — the caller is already throwing with the details.
-		}
-	}
+    private void TryQuarantine(string destination)
+    {
+        try
+        {
+            File.Move(_filePath, destination, overwrite: false);
+        }
+        catch (Exception)
+        {
+            // Best effort — the caller is already throwing with the details.
+        }
+    }
 
-	private void PersistLocked(Dictionary<string, string> data)
-	{
-		string json = JsonSerializer.Serialize(data, new JsonSerializerOptions { WriteIndented = true });
-		string temporaryPath = _filePath + ".tmp";
+    private void PersistLocked(Dictionary<string, string> data)
+    {
+        string json = JsonSerializer.Serialize(data, new JsonSerializerOptions { WriteIndented = true });
+        string temporaryPath = _filePath + ".tmp";
 
-		// Write-then-replace. File.WriteAllText straight onto the real path truncates it first, so an
-		// interruption at that moment leaves an empty or partial file and every prior backup is gone.
-		File.WriteAllText(temporaryPath, json);
-		if (File.Exists(_filePath))
-		{
-			File.Replace(temporaryPath, _filePath, destinationBackupFileName: null, ignoreMetadataErrors: true);
-		}
-		else
-		{
-			File.Move(temporaryPath, _filePath);
-		}
+        // Write-then-replace. File.WriteAllText straight onto the real path truncates it first, so an
+        // interruption at that moment leaves an empty or partial file and every prior backup is gone.
+        File.WriteAllText(temporaryPath, json);
+        if (File.Exists(_filePath))
+        {
+            File.Replace(temporaryPath, _filePath, destinationBackupFileName: null, ignoreMetadataErrors: true);
+        }
+        else
+        {
+            File.Move(temporaryPath, _filePath);
+        }
 
-		_cache = data;
-	}
+        _cache = data;
+    }
 }

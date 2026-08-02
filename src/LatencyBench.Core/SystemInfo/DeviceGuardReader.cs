@@ -19,53 +19,53 @@ namespace LatencyBench.Core.SystemInfo;
 /// </summary>
 public sealed class DeviceGuardReader
 {
-	private const string Namespace = @"root\Microsoft\Windows\DeviceGuard";
+    private const string Namespace = @"root\Microsoft\Windows\DeviceGuard";
 
-	/// <summary>Win32_DeviceGuard.SecurityServicesRunning value for hypervisor-enforced code
-	/// integrity — the "Memory integrity" switch in Windows Security.</summary>
-	private const uint SecurityServiceHypervisorEnforcedCodeIntegrity = 2;
+    /// <summary>Win32_DeviceGuard.SecurityServicesRunning value for hypervisor-enforced code
+    /// integrity — the "Memory integrity" switch in Windows Security.</summary>
+    private const uint SecurityServiceHypervisorEnforcedCodeIntegrity = 2;
 
-	/// <summary>VirtualizationBasedSecurityStatus: 0 off, 1 enabled but not running, 2 running.</summary>
-	private const uint VbsRunning = 2;
+    /// <summary>VirtualizationBasedSecurityStatus: 0 off, 1 enabled but not running, 2 running.</summary>
+    private const uint VbsRunning = 2;
 
-	public (FeatureState VirtualizationBasedSecurity, FeatureState MemoryIntegrity) Read()
-	{
-		using var searcher = new ManagementObjectSearcher(
-			new ManagementScope(Namespace),
-			new ObjectQuery("SELECT VirtualizationBasedSecurityStatus, SecurityServicesRunning FROM Win32_DeviceGuard"));
+    public (FeatureState VirtualizationBasedSecurity, FeatureState MemoryIntegrity) Read()
+    {
+        using var searcher = new ManagementObjectSearcher(
+            new ManagementScope(Namespace),
+            new ObjectQuery("SELECT VirtualizationBasedSecurityStatus, SecurityServicesRunning FROM Win32_DeviceGuard"));
 
-		using ManagementObjectCollection results = searcher.Get();
+        using ManagementObjectCollection results = searcher.Get();
 
-		foreach (ManagementBaseObject result in results)
-		{
-			using (result)
-			{
-				FeatureState vbs = result["VirtualizationBasedSecurityStatus"] is uint status
-					? (status == VbsRunning ? FeatureState.Enabled : FeatureState.Disabled)
-					: FeatureState.Unknown;
+        foreach (ManagementBaseObject result in results)
+        {
+            using (result)
+            {
+                FeatureState vbs = result["VirtualizationBasedSecurityStatus"] is uint status
+                    ? (status == VbsRunning ? FeatureState.Enabled : FeatureState.Disabled)
+                    : FeatureState.Unknown;
 
-				FeatureState hvci = ReadMemoryIntegrity(result["SecurityServicesRunning"]);
+                FeatureState hvci = ReadMemoryIntegrity(result["SecurityServicesRunning"]);
 
-				return (vbs, hvci);
-			}
-		}
+                return (vbs, hvci);
+            }
+        }
 
-		// The class exists on every supported Windows but returns no instance on editions where
-		// Device Guard is unavailable.
-		return (FeatureState.Unknown, FeatureState.Unknown);
-	}
+        // The class exists on every supported Windows but returns no instance on editions where
+        // Device Guard is unavailable.
+        return (FeatureState.Unknown, FeatureState.Unknown);
+    }
 
-	private static FeatureState ReadMemoryIntegrity(object? securityServicesRunning)
-	{
-		if (securityServicesRunning is not uint[] services)
-		{
-			return FeatureState.Unknown;
-		}
+    private static FeatureState ReadMemoryIntegrity(object? securityServicesRunning)
+    {
+        if (securityServicesRunning is not uint[] services)
+        {
+            return FeatureState.Unknown;
+        }
 
-		// An empty array is a definite answer — VBS reported its running services and memory
-		// integrity was not among them.
-		return services.Contains(SecurityServiceHypervisorEnforcedCodeIntegrity)
-			? FeatureState.Enabled
-			: FeatureState.Disabled;
-	}
+        // An empty array is a definite answer — VBS reported its running services and memory
+        // integrity was not among them.
+        return services.Contains(SecurityServiceHypervisorEnforcedCodeIntegrity)
+            ? FeatureState.Enabled
+            : FeatureState.Disabled;
+    }
 }

@@ -4,8 +4,8 @@ namespace LatencyBench.App.Views;
 
 public partial class OptimizeView : UserControl
 {
-	public OptimizeView()
-	{
-		InitializeComponent();
-	}
+    public OptimizeView()
+    {
+        InitializeComponent();
+    }
 }

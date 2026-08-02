@@ -18,43 +18,43 @@ namespace LatencyBench.Core.Recommendations;
 /// </summary>
 public sealed class RecommendationContext
 {
-	public required SystemProfile Profile { get; init; }
+    public required SystemProfile Profile { get; init; }
 
-	/// <summary>Current state of every tweak in the catalog, keyed by tweak id.</summary>
-	public required IReadOnlyDictionary<string, TweakState> TweakStates { get; init; }
+    /// <summary>Current state of every tweak in the catalog, keyed by tweak id.</summary>
+    public required IReadOnlyDictionary<string, TweakState> TweakStates { get; init; }
 
-	/// <summary>Interrupt-capable devices and their MSI/priority state.</summary>
-	public IReadOnlyList<InterruptDeviceInfo> InterruptDevices { get; init; } = Array.Empty<InterruptDeviceInfo>();
+    /// <summary>Interrupt-capable devices and their MSI/priority state.</summary>
+    public IReadOnlyList<InterruptDeviceInfo> InterruptDevices { get; init; } = Array.Empty<InterruptDeviceInfo>();
 
-	/// <summary>Current interrupt affinity policy per device.</summary>
-	public IReadOnlyList<HostControllerInfo> AffinityPolicies { get; init; } = Array.Empty<HostControllerInfo>();
+    /// <summary>Current interrupt affinity policy per device.</summary>
+    public IReadOnlyList<HostControllerInfo> AffinityPolicies { get; init; } = Array.Empty<HostControllerInfo>();
 
-	/// <summary>Saved DPC/ISR traces, newest first is not assumed — rules that care sort explicitly.</summary>
-	public IReadOnlyList<DpcIsrTestResult> DpcIsrTraces { get; init; } = Array.Empty<DpcIsrTestResult>();
+    /// <summary>Saved DPC/ISR traces, newest first is not assumed — rules that care sort explicitly.</summary>
+    public IReadOnlyList<DpcIsrTestResult> DpcIsrTraces { get; init; } = Array.Empty<DpcIsrTestResult>();
 
-	/// <summary>Saved port tests.</summary>
-	public IReadOnlyList<HidTestResult> PortTests { get; init; } = Array.Empty<HidTestResult>();
+    /// <summary>Saved port tests.</summary>
+    public IReadOnlyList<HidTestResult> PortTests { get; init; } = Array.Empty<HidTestResult>();
 
-	/// <summary>
-	/// Timer resolution and the timer-related boot options. Null when it has not been read — reading
-	/// the boot configuration shells out to bcdedit and needs elevation, so rules must treat its
-	/// absence as "do not know" rather than as "nothing set".
-	/// </summary>
-	public TimerState? Timers { get; init; }
+    /// <summary>
+    /// Timer resolution and the timer-related boot options. Null when it has not been read — reading
+    /// the boot configuration shells out to bcdedit and needs elevation, so rules must treat its
+    /// absence as "do not know" rather than as "nothing set".
+    /// </summary>
+    public TimerState? Timers { get; init; }
 
-	/// <summary>True when the process can actually write the settings a recommendation would apply.
-	/// Rules still produce recommendations without it — the user should see what is available — but
-	/// the engine marks them as needing elevation.</summary>
-	public bool IsElevated { get; init; }
+    /// <summary>True when the process can actually write the settings a recommendation would apply.
+    /// Rules still produce recommendations without it — the user should see what is available — but
+    /// the engine marks them as needing elevation.</summary>
+    public bool IsElevated { get; init; }
 
-	public TweakState StateOf(string tweakId) =>
-		TweakStates.TryGetValue(tweakId, out TweakState state) ? state : TweakState.Unknown;
+    public TweakState StateOf(string tweakId) =>
+        TweakStates.TryGetValue(tweakId, out TweakState state) ? state : TweakState.Unknown;
 
-	/// <summary>The most recent trace, or null when nothing has been measured yet.</summary>
-	public DpcIsrTestResult? LatestTrace =>
-		DpcIsrTraces.Count == 0 ? null : DpcIsrTraces.OrderByDescending(trace => trace.SavedAt).First();
+    /// <summary>The most recent trace, or null when nothing has been measured yet.</summary>
+    public DpcIsrTestResult? LatestTrace =>
+        DpcIsrTraces.Count == 0 ? null : DpcIsrTraces.OrderByDescending(trace => trace.SavedAt).First();
 
-	public InterruptDeviceInfo? FindInterruptDevice(string instanceId) =>
-		InterruptDevices.FirstOrDefault(device =>
-			string.Equals(device.InstanceId, instanceId, StringComparison.OrdinalIgnoreCase));
+    public InterruptDeviceInfo? FindInterruptDevice(string instanceId) =>
+        InterruptDevices.FirstOrDefault(device =>
+            string.Equals(device.InstanceId, instanceId, StringComparison.OrdinalIgnoreCase));
 }
