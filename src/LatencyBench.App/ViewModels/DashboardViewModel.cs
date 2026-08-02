@@ -85,48 +85,51 @@ public sealed partial class DashboardViewModel : ObservableObject
 
     private async Task RefreshDiagnosisAsync()
     {
-        IReadOnlyList<UsbDeviceNode> tree;
+        // The action plan is a convenience layer over data the individual tabs already show, and this
+        // runs fire-and-forget from several CollectionChanged handlers with nothing awaiting it — so
+        // the whole recompute is wrapped in one try/catch. A failure anywhere in it (a stale
+        // enumeration, an unexpected data shape) just means the action plan doesn't update this time
+        // rather than becoming an unobserved exception or breaking anything else on the Dashboard; the
+        // next change that fires this again gets another chance.
         try
         {
-            tree = await Task.Run(() => _treeEnumerator.EnumerateHostControllers());
+            var tree = await Task.Run(() => _treeEnumerator.EnumerateHostControllers());
+
+            var controllerSignals = Affinity.Controllers.Select(c =>
+            {
+                var pinned = c.Cores.Where(x => x.IsSelected).Select(x => x.Index).ToList();
+                var policy = pinned.Count > 0 ? InterruptAffinityPolicy.SpecifiedProcessors : InterruptAffinityPolicy.MachineDefault;
+                var node = tree.FirstOrDefault(n => string.Equals(n.InstanceId, c.InstanceId, StringComparison.OrdinalIgnoreCase));
+                var contentionDetail = node is null ? null : ControllerContentionAdvisor.Generate([node], [c.ControllerNumber]);
+                var hasLatencySensitiveDevice = node is not null && ControllerContentionAdvisor.HasLatencySensitiveDevice(node);
+
+                var matchingCoreLoads = DpcIsr.CoreLoads.Where(cl => pinned.Contains(cl.CoreIndex)).ToList();
+                double? pinnedShare = matchingCoreLoads.Count == 0 ? null : matchingCoreLoads.Max(cl => cl.SharePercent);
+
+                return new ControllerSignal(c.AttachedDevicesSummary, c.ControllerNumber, c.InstanceId, contentionDetail, policy, pinned, pinnedShare, hasLatencySensitiveDevice);
+            }).ToList();
+
+            // Every MSI-mode category, not just GPU — a mouse/keyboard/USB microphone doesn't have its
+            // own MSI/priority settings, the USB controller carrying it does, so that controller has to
+            // be a candidate here too for the Action Plan to ever recommend tuning it.
+            var interruptDeviceSignals = MsiMode.Devices
+                .Select(d => new InterruptDeviceSignal(d.DeviceLabel, d.CategoryLabel, d.ServiceName, d.IsMsiEnabled, d.SelectedPriority))
+                .ToList();
+
+            var coreLoads = DpcIsr.CoreLoads.Select(c => new CoreLoad(c.CoreIndex, c.SharePercent)).ToList();
+            var wirelessInterferenceWarning = WirelessInterferenceAdvisor.Generate(tree);
+
+            var findings = UnifiedDiagnosisGenerator.Generate(_historyStore.Results.ToList(), DpcIsr.SavedTraces.ToList(), controllerSignals, coreLoads, interruptDeviceSignals, wirelessInterferenceWarning);
+
+            DiagnosisFindings.Clear();
+            foreach (var finding in findings)
+            {
+                DiagnosisFindings.Add(finding);
+            }
         }
         catch
         {
-            // The action plan is a convenience layer over data the individual tabs already show;
-            // a failed re-enumeration here shouldn't break anything else on the Dashboard.
-            return;
-        }
-
-        var controllerSignals = Affinity.Controllers.Select(c =>
-        {
-            var pinned = c.Cores.Where(x => x.IsSelected).Select(x => x.Index).ToList();
-            var policy = pinned.Count > 0 ? InterruptAffinityPolicy.SpecifiedProcessors : InterruptAffinityPolicy.MachineDefault;
-            var node = tree.FirstOrDefault(n => string.Equals(n.InstanceId, c.InstanceId, StringComparison.OrdinalIgnoreCase));
-            var contentionDetail = node is null ? null : ControllerContentionAdvisor.Generate([node], [c.ControllerNumber]);
-            var hasLatencySensitiveDevice = node is not null && ControllerContentionAdvisor.HasLatencySensitiveDevice(node);
-
-            var matchingCoreLoads = DpcIsr.CoreLoads.Where(cl => pinned.Contains(cl.CoreIndex)).ToList();
-            double? pinnedShare = matchingCoreLoads.Count == 0 ? null : matchingCoreLoads.Max(cl => cl.SharePercent);
-
-            return new ControllerSignal(c.AttachedDevicesSummary, c.ControllerNumber, c.InstanceId, contentionDetail, policy, pinned, pinnedShare, hasLatencySensitiveDevice);
-        }).ToList();
-
-        // Every MSI-mode category, not just GPU — a mouse/keyboard/USB microphone doesn't have its
-        // own MSI/priority settings, the USB controller carrying it does, so that controller has to be
-        // a candidate here too for the Action Plan to ever recommend tuning it.
-        var interruptDeviceSignals = MsiMode.Devices
-            .Select(d => new InterruptDeviceSignal(d.DeviceLabel, d.CategoryLabel, d.ServiceName, d.IsMsiEnabled, d.SelectedPriority))
-            .ToList();
-
-        var coreLoads = DpcIsr.CoreLoads.Select(c => new CoreLoad(c.CoreIndex, c.SharePercent)).ToList();
-        var wirelessInterferenceWarning = WirelessInterferenceAdvisor.Generate(tree);
-
-        var findings = UnifiedDiagnosisGenerator.Generate(_historyStore.Results.ToList(), DpcIsr.SavedTraces.ToList(), controllerSignals, coreLoads, interruptDeviceSignals, wirelessInterferenceWarning);
-
-        DiagnosisFindings.Clear();
-        foreach (var finding in findings)
-        {
-            DiagnosisFindings.Add(finding);
+            // See comment above — intentionally swallowed.
         }
     }
 

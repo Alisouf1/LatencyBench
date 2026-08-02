@@ -83,7 +83,7 @@ public class TweakCatalog
 				Risk = TweakRisk.RequiresReboot,
 				RequiresReboot = true
 			}, RegistryHive.LocalMachine, "SYSTEM\\CurrentControlSet\\Control\\GraphicsDrivers", "HwSchMode", 2, 1, backupStore),
-			new TrimEnabledTweak(),
+			new TrimEnabledTweak(backupStore),
 			// "Disable scheduled defrag" was removed rather than fixed. On Windows 8 and later that
 			// task is the Storage Optimizer: on an SSD it does not defragment at all, it issues the
 			// scheduled retrim. Disabling it therefore gives up periodic TRIM — which degrades write

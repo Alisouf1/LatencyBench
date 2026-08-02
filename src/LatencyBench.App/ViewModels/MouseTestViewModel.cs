@@ -31,6 +31,13 @@ public sealed partial class MouseTestViewModel : ObservableObject
     private DateTime _captureStartedAt;
     private bool _loadedOnce;
 
+    /// <summary>The device's label, snapshotted when the capture actually starts rather than read
+    /// from <see cref="SelectedDevice"/> again in <see cref="StopCapture"/> — if the device is
+    /// unplugged (or the picker's selection otherwise changes) between Start and Stop, SelectedDevice
+    /// can become null while a capture is still in progress, and the result should still be
+    /// attributed to whichever device was actually captured.</summary>
+    private string? _capturingDeviceLabel;
+
     public ObservableCollection<MouseDeviceOption> Devices { get; } = [];
 
     public ObservableCollection<MouseSessionRowViewModel> SavedResults { get; } = [];
@@ -242,6 +249,7 @@ public sealed partial class MouseTestViewModel : ObservableObject
         ComparePoints = [];
         XTicks.Clear();
         YTicks.Clear();
+        _capturingDeviceLabel = SelectedDevice.DisplayLabel;
         _captureStartedAt = DateTime.Now;
         _liveTimer.Start();
         StatusMessage = "Move the mouse now — click \"Stop\" when done.";
@@ -264,7 +272,7 @@ public sealed partial class MouseTestViewModel : ObservableObject
 
         LastResult = new MouseTestResult
         {
-            DeviceFriendlyName = SelectedDevice!.DisplayLabel,
+            DeviceFriendlyName = _capturingDeviceLabel ?? "Unknown device",
             Samples = samples.ToList(),
             SampleCount = analysis.Value.SampleCount,
             DurationMs = analysis.Value.DurationMs,

@@ -3,6 +3,9 @@
 ; Requires the Release publish to already exist at PublishDir before compiling.
 
 #define MyAppName "LatencyBench"
+; Canonical version lives in Directory.Build.props (LatencyBenchVersion) at the repo root — this
+; string is not read from there automatically (Inno Setup doesn't evaluate MSBuild files), so keep
+; the two in sync by hand whenever the version changes.
 #define MyAppVersion "1.0.0"
 #define MyAppPublisher "Alisouf"
 #define MyAppExeName "LatencyBench.App.exe"
