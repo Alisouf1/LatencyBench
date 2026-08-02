@@ -22,6 +22,14 @@ public enum IoPriority
 }
 
 /// <summary>A running process and the scheduling state that can be tuned.</summary>
+/// <param name="CanModify">
+/// Whether this process can plausibly have its priority, I/O priority or affinity changed at all —
+/// checked by actually attempting to open it with the specific access right those operations need,
+/// not inferred by name. Always false when <paramref name="IsAccessible"/> is false. Anti-cheat
+/// drivers (EasyAntiCheat, BattlEye, Vanguard and similar) commonly strip write access to the game
+/// they protect while leaving read access intact, which is exactly the case this distinguishes from
+/// general inaccessibility.
+/// </param>
 public sealed record TunableProcess(
     int Id,
     string Name,
@@ -29,7 +37,8 @@ public sealed record TunableProcess(
     ProcessPriorityClass? PriorityClass,
     IoPriority? IoPriority,
     ulong? AffinityMask,
-    bool IsAccessible)
+    bool IsAccessible,
+    bool CanModify)
 {
     public string DisplayName => string.IsNullOrWhiteSpace(MainWindowTitle)
         ? Name
@@ -122,7 +131,29 @@ public sealed class ProcessTuner
             accessible = false;
         }
 
-        return new TunableProcess(process.Id, process.ProcessName, title, priority, ioPriority, affinity, accessible);
+        // No point probing write access on a process that could not even be read.
+        bool canModify = accessible && CanModify(process.Id);
+
+        return new TunableProcess(process.Id, process.ProcessName, title, priority, ioPriority, affinity, accessible, canModify);
+    }
+
+    /// <summary>
+    /// Whether SetPriority/SetIoPriority/SetAffinity have any realistic chance of succeeding against
+    /// this process, checked by actually attempting to open it with exactly the access right those
+    /// calls need — not by name or by guessing from whether it is readable. This is the signal that
+    /// distinguishes an anti-cheat-protected game (readable, but writes are refused) from a process
+    /// that cannot be inspected at all.
+    /// </summary>
+    public static bool CanModify(int processId)
+    {
+        nint handle = ProcessApi.OpenProcess(ProcessApi.ProcessSetInformation, false, processId);
+        if (handle == 0)
+        {
+            return false;
+        }
+
+        ProcessApi.CloseHandle(handle);
+        return true;
     }
 
     private static string? SafeMainWindowTitle(Process process)
@@ -172,6 +203,19 @@ public sealed class ProcessTuner
         }
 
         process.PriorityClass = priority;
+
+        // Some anti-cheat drivers let SetPriorityClass return success without the change actually
+        // taking effect, rather than failing the call outright. Re-reading after the write — the same
+        // pattern PowerCfgAcValueTweak.WriteValueAndVerify uses — catches that instead of trusting the
+        // call's return value, so the caller never believes a change happened when it did not.
+        process.Refresh();
+        if (process.PriorityClass != priority)
+        {
+            throw new InvalidOperationException(
+                $"'{process.ProcessName}' did not actually change priority to {priority} (it is still " +
+                $"{process.PriorityClass}), even though the request did not report an error. This usually " +
+                "means anti-cheat or another security tool is protecting the process.");
+        }
     }
 
     /// <summary>
@@ -211,6 +255,17 @@ public sealed class ProcessTuner
             throw new Win32Exception(
                 ProcessApi.RtlNtStatusToDosError(status),
                 $"Could not set the I/O priority of '{process.ProcessName}'.");
+        }
+
+        // See the comment in SetPriority: a success status does not guarantee the value actually took
+        // effect. Re-read and confirm rather than trust the return code alone.
+        IoPriority? actual = ReadIoPriority(process.Handle);
+        if (actual != priority)
+        {
+            throw new InvalidOperationException(
+                $"'{process.ProcessName}' did not actually change I/O priority to {priority} (it is still " +
+                $"{(actual?.ToString() ?? "unreadable")}), even though the request did not report an error. " +
+                "This usually means anti-cheat or another security tool is protecting the process.");
         }
     }
 
@@ -274,18 +329,45 @@ public sealed class ProcessTuner
                 $"'{process.ProcessName}' is a core Windows process and is not safe to retune.");
         }
 
-        process.ProcessorAffinity = new IntPtr(unchecked((long)AffinityMask.FromCoreIndices(logicalProcessors)));
+        ulong expectedMask = AffinityMask.FromCoreIndices(logicalProcessors);
+        process.ProcessorAffinity = new IntPtr(unchecked((long)expectedMask));
+
+        // See the comment in SetPriority: a write that does not report an error is not proof it took
+        // effect. ProcessorAffinity's setter goes through the same PROCESS_SET_INFORMATION-gated path
+        // anti-cheat drivers commonly intercept, so it gets the same re-read-and-confirm treatment.
+        process.Refresh();
+        if (unchecked((ulong)process.ProcessorAffinity.ToInt64()) != expectedMask)
+        {
+            throw new InvalidOperationException(
+                $"'{process.ProcessName}' did not actually change its processor affinity, even though the " +
+                "request did not report an error. This usually means anti-cheat or another security tool " +
+                "is protecting the process.");
+        }
     }
 
     /// <summary>Restores a process to every logical processor.</summary>
     public void ClearAffinity(int processId)
     {
         using Process process = Process.GetProcessById(processId);
+        if (IsProtected(process.ProcessName))
+        {
+            throw new InvalidOperationException(
+                $"'{process.ProcessName}' is a core Windows process and is not safe to retune.");
+        }
 
         ulong all = Environment.ProcessorCount >= 64
             ? ulong.MaxValue
             : (1UL << Environment.ProcessorCount) - 1;
 
         process.ProcessorAffinity = new IntPtr(unchecked((long)all));
+
+        process.Refresh();
+        if (unchecked((ulong)process.ProcessorAffinity.ToInt64()) != all)
+        {
+            throw new InvalidOperationException(
+                $"'{process.ProcessName}' did not actually restore its processor affinity, even though the " +
+                "request did not report an error. This usually means anti-cheat or another security tool " +
+                "is protecting the process.");
+        }
     }
 }

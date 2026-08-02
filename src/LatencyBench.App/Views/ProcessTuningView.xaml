@@ -40,18 +40,30 @@
                                 <TextBlock Text="Not accessible — running at a higher integrity level" Style="{StaticResource SecondaryText}"
                                            Foreground="{StaticResource WarningBrush}"
                                            Visibility="{Binding IsAccessible, Converter={StaticResource InverseBoolToVisibleConverter}}"/>
+                                <TextBlock Text="{Binding DisabledReason}" Style="{StaticResource SecondaryText}" TextWrapping="Wrap"
+                                           Foreground="{StaticResource WarningBrush}"
+                                           Visibility="{Binding IsWriteProtected, Converter={StaticResource BoolToVisibleConverter}}"/>
+                                <TextBlock Text="{Binding RowError}" Style="{StaticResource SecondaryText}" TextWrapping="Wrap"
+                                           Foreground="{StaticResource WarningBrush}"
+                                           Visibility="{Binding RowError, Converter={StaticResource StringToVisibilityConverter}}"/>
                             </StackPanel>
 
                             <StackPanel DockPanel.Dock="Right" Orientation="Horizontal"
-                                        IsEnabled="{Binding IsAccessible}">
-                                <Button Content="Normal" Style="{StaticResource AppButton}" Margin="4,0,0,0" Command="{Binding SetNormalPriorityCommand}"/>
-                                <Button Content="Above normal" Style="{StaticResource AppButton}" Margin="4,0,0,0" Command="{Binding SetAboveNormalCommand}"/>
-                                <Button Content="High" Style="{StaticResource AppButton}" Margin="4,0,0,0" Command="{Binding SetHighCommand}"/>
-                                <Button Content="I/O normal" Style="{StaticResource AppButton}" Margin="12,0,0,0" Command="{Binding SetNormalIoCommand}"/>
-                                <Button Content="I/O high" Style="{StaticResource AppButton}" Margin="4,0,0,0" Command="{Binding SetHighIoCommand}"/>
+                                        IsEnabled="{Binding CanModify}">
+                                <Button Content="Normal" Style="{StaticResource AppButton}" Margin="4,0,0,0" Command="{Binding SetNormalPriorityCommand}"
+                                        ToolTip="{Binding DisabledReason}" ToolTipService.ShowOnDisabled="True"/>
+                                <Button Content="Above normal" Style="{StaticResource AppButton}" Margin="4,0,0,0" Command="{Binding SetAboveNormalCommand}"
+                                        ToolTip="{Binding DisabledReason}" ToolTipService.ShowOnDisabled="True"/>
+                                <Button Content="High" Style="{StaticResource AppButton}" Margin="4,0,0,0" Command="{Binding SetHighCommand}"
+                                        ToolTip="{Binding DisabledReason}" ToolTipService.ShowOnDisabled="True"/>
+                                <Button Content="I/O normal" Style="{StaticResource AppButton}" Margin="12,0,0,0" Command="{Binding SetNormalIoCommand}"
+                                        ToolTip="{Binding DisabledReason}" ToolTipService.ShowOnDisabled="True"/>
+                                <Button Content="I/O high" Style="{StaticResource AppButton}" Margin="4,0,0,0" Command="{Binding SetHighIoCommand}"
+                                        ToolTip="{Binding DisabledReason}" ToolTipService.ShowOnDisabled="True"/>
                                 <Button Content="Clear affinity" Style="{StaticResource AppButton}" Margin="12,0,0,0"
                                         Command="{Binding ClearAffinityCommand}"
-                                        Visibility="{Binding HasCustomAffinity, Converter={StaticResource BoolToVisibleConverter}}"/>
+                                        Visibility="{Binding HasCustomAffinity, Converter={StaticResource BoolToVisibleConverter}}"
+                                        ToolTip="{Binding DisabledReason}" ToolTipService.ShowOnDisabled="True"/>
                             </StackPanel>
                         </DockPanel>
                     </Border>

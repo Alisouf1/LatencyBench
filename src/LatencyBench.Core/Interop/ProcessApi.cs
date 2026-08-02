@@ -33,4 +33,20 @@ internal static class ProcessApi
     internal static extern int RtlNtStatusToDosError(int status);
 
     internal const int StatusSuccess = 0;
+
+    /// <summary>
+    /// The specific access right SetPriorityClass, NtSetInformationProcess and
+    /// Process.ProcessorAffinity's setter all require. Checked on its own (rather than inferred from
+    /// whether the process could be read) because anti-cheat drivers commonly strip exactly this
+    /// right from handles opened by other processes to the game they protect while leaving query
+    /// rights intact — the process is still fully readable, only writable state changes are refused.
+    /// </summary>
+    internal const uint ProcessSetInformation = 0x0200;
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    internal static extern nint OpenProcess(uint desiredAccess, [MarshalAs(UnmanagedType.Bool)] bool inheritHandle, int processId);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static extern bool CloseHandle(nint handle);
 }

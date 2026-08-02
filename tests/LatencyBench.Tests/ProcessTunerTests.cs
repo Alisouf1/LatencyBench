@@ -242,11 +242,43 @@ public class ProcessTunerTests : IDisposable
     [Fact]
     public void DisplayNameFallsBackToTheProcessNameWithoutAWindowTitle()
     {
-        var withoutTitle = new TunableProcess(1, "game", null, null, null, null, true);
-        var withTitle = new TunableProcess(2, "game", "My Game", null, null, null, true);
+        var withoutTitle = new TunableProcess(1, "game", null, null, null, null, true, true);
+        var withTitle = new TunableProcess(2, "game", "My Game", null, null, null, true, true);
 
         Assert.Equal("game", withoutTitle.DisplayName);
         Assert.Equal("game — My Game", withTitle.DisplayName);
+    }
+
+    // ---- Write-access detection ---------------------------------------------------------------
+
+    [Fact]
+    public void CanModifyReturnsTrueForAProcessThisTestIsAllowedToChange()
+    {
+        // Proven by the SetPriority/SetIoPriority/SetAffinity tests elsewhere in this file actually
+        // succeeding against the test host itself — this just checks the probe agrees up front.
+        Assert.True(ProcessTuner.CanModify(SelfId));
+    }
+
+    [Fact]
+    public void CanModifyReturnsFalseForTheSystemProcess()
+    {
+        // PID 4 ("System") is the kernel's own pseudo-process. It cannot be opened with
+        // PROCESS_SET_INFORMATION by any normal-privilege caller — including an elevated one without
+        // SeDebugPrivilege explicitly enabled — regardless of anti-cheat being involved at all. That
+        // makes it a real, deterministic stand-in for "a process this app cannot get write access to",
+        // without needing actual anti-cheat software to reproduce the scenario. Read-only: this never
+        // attempts to change anything about PID 4, only whether a handle with that one access right
+        // can be opened.
+        Assert.False(ProcessTuner.CanModify(4));
+    }
+
+    [Fact]
+    public void ListingReportsThatTheTestHostCanBeModified()
+    {
+        var candidates = _tuner.ListCandidates(windowedOnly: false);
+
+        var self = Assert.Single(candidates, candidate => candidate.Id == SelfId);
+        Assert.True(self.CanModify);
     }
 
     [Fact]
