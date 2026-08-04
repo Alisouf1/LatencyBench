@@ -122,6 +122,24 @@ public sealed class MemoryInfo
     public required uint LoadPercent { get; init; }
 }
 
+/// <param name="RatedSpeedMHz">
+/// The module's rated maximum transfer speed (WMI Win32_PhysicalMemory.Speed) — what the memory is
+/// capable of, not necessarily what it is doing right now. Ground-truthed against a real DDR5 kit
+/// before being trusted: on the reference machine Speed reports 6000 and, with XMP/EXPO enabled,
+/// ConfiguredClockSpeed also reports 6000. Zero means the field was not populated by firmware, which
+/// some OEM BIOSes do for either field independently.
+/// </param>
+/// <param name="ConfiguredSpeedMHz">The speed the module is actually clocked at right now (WMI
+/// Win32_PhysicalMemory.ConfiguredClockSpeed). Lower than <see cref="RatedSpeedMHz"/> means an
+/// XMP/DOCP/EXPO profile is available in firmware but not enabled.</param>
+public sealed record MemoryModuleInfo(
+    string? BankLabel,
+    string? Manufacturer,
+    string? PartNumber,
+    ulong CapacityBytes,
+    uint RatedSpeedMHz,
+    uint ConfiguredSpeedMHz);
+
 /// <summary>Everything the detection layer found, in one immutable snapshot.</summary>
 public sealed class SystemProfile
 {
@@ -142,6 +160,11 @@ public sealed class SystemProfile
     public required IReadOnlyList<UsbHostControllerSummary> UsbControllers { get; init; }
 
     public required IReadOnlyList<NetworkAdapterSummary> NetworkAdapters { get; init; }
+
+    /// <summary>Installed RAM modules, from WMI — the only source for rated-vs-configured clock
+    /// speed. Empty when the query fails rather than absent, so a warning explains why rather than
+    /// the profile silently having no memory section.</summary>
+    public required IReadOnlyList<MemoryModuleInfo> MemoryModules { get; init; }
 
     /// <summary>
     /// True when the machine has a system battery. Several optimisations that are unambiguously good

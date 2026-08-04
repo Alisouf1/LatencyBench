@@ -143,7 +143,25 @@ public class TweakCatalog
                 Risk = TweakRisk.RequiresReboot,
                 RequiresReboot = true
             }, RegistryHive.LocalMachine, @"SYSTEM\CurrentControlSet\Control\Session Manager\kernel",
-                "GlobalTimerResolutionRequests", 1, 0, backupStore)
+                "GlobalTimerResolutionRequests", 1, 0, backupStore),
+            // --- Storage ----------------------------------------------------------------------
+            new LastAccessTimestampTweak(backupStore),
+            // --- Scheduler --------------------------------------------------------------------
+            // Win32PrioritySeparation is the registry value behind System Properties > Advanced >
+            // Performance Options > Advanced > "Adjust for best performance of: Programs" (client
+            // default, value 2 — short, variable quanta with a foreground priority boost) versus
+            // "Background services" (the value Windows Server ships with instead). This restores
+            // the documented client default rather than asserting some new "better" value, which is
+            // why applying it is safe: it is what a clean install of this edition already has.
+            new RegistryDwordTweak(new TweakDefinition
+            {
+                Id = "system.win32-priority-separation",
+                Category = TweakCategory.Cpu,
+                Name = "Restore foreground-app scheduling priority",
+                Description = "Restores Win32PrioritySeparation to 2 — the default Windows client scheduling behaviour that favours the foreground app — matching System Properties > Advanced > Performance Options > \"Adjust for best performance of: Programs\".",
+                Risk = TweakRisk.Safe
+            }, RegistryHive.LocalMachine, @"SYSTEM\CurrentControlSet\Control\PriorityControl",
+                "Win32PrioritySeparation", 2, 2, backupStore)
         };
     }
 

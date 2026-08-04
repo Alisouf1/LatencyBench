@@ -71,7 +71,10 @@ public sealed class RecommendationEngine
         new NetworkPowerManagementRule(),
         new NagleAlgorithmRule(),
         new NetworkThrottlingRule(),
-        new PointerPrecisionRule()
+        new PointerPrecisionRule(),
+        new MemorySpeedRule(),
+        new SchedulerPrioritySeparationRule(),
+        new LastAccessTimestampRule()
     };
 
     public RecommendationReport Analyze(RecommendationContext context)

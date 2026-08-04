@@ -357,6 +357,145 @@ public class RecommendationEngineTests
         Assert.Contains(report.Recommendations, r => r.Id == "rec.interrupts.usb-controller-affinity");
     }
 
+    // ---- Memory speed -----------------------------------------------------------------------
+
+    [Fact]
+    public void MemorySpeedIsQuietWhenEveryModuleIsAtRatedSpeed()
+    {
+        // TestProfiles' default fixture matches the real ground-truthed reference machine: rated and
+        // configured both 6000 MHz.
+        var report = new RecommendationEngine().Analyze(Context());
+
+        Assert.DoesNotContain(report.Recommendations, r => r.Id == "rec.memory.below-rated-speed");
+        Assert.Contains(report.NotApplicable, outcome => outcome.RuleId == "rec.memory.below-rated-speed");
+    }
+
+    [Fact]
+    public void MemorySpeedFiresWhenRunningWellBelowRated()
+    {
+        var profile = TestProfiles.Profile(memoryModules: new[]
+        {
+            new MemoryModuleInfo("P0 CHANNEL A", "Vendor", "PART-1", 16UL * 1024 * 1024 * 1024, 6000, 4800)
+        });
+
+        var report = new RecommendationEngine().Analyze(Context(profile));
+
+        var recommendation = Assert.Single(report.Recommendations.Where(r => r.Id == "rec.memory.below-rated-speed"));
+        Assert.Equal(RecommendationConfidence.Measured, recommendation.Confidence);
+        Assert.IsType<RecommendedAction.ManualOnly>(recommendation.Action);
+        // BankLabel is preferred over PartNumber when both are present — matching what Device Manager
+        // itself calls the slot ("P0 CHANNEL A"), which is what a user can actually see and act on.
+        Assert.Contains("P0 CHANNEL A", recommendation.Evidence[0].Observation);
+    }
+
+    [Fact]
+    public void MemorySpeedIgnoresATinyGapWithinRoundingMargin()
+    {
+        // 6000 vs 5900 is inside the 200 MHz noise floor and must not be reported as a real finding.
+        var profile = TestProfiles.Profile(memoryModules: new[]
+        {
+            new MemoryModuleInfo(null, null, null, 16UL * 1024 * 1024 * 1024, 6000, 5900)
+        });
+
+        var report = new RecommendationEngine().Analyze(Context(profile));
+
+        Assert.DoesNotContain(report.Recommendations, r => r.Id == "rec.memory.below-rated-speed");
+    }
+
+    [Fact]
+    public void MemorySpeedTreatsAZeroFieldAsUnpopulatedRatherThanAFinding()
+    {
+        // Some OEM firmware leaves one of the two fields at 0. That is "not reported", not "running
+        // at 0 MHz", and must not be compared as if it were a real reading.
+        var profile = TestProfiles.Profile(memoryModules: new[]
+        {
+            new MemoryModuleInfo(null, null, null, 16UL * 1024 * 1024 * 1024, 0, 4800)
+        });
+
+        var report = new RecommendationEngine().Analyze(Context(profile));
+
+        Assert.Contains(report.Undetermined, outcome => outcome.RuleId == "rec.memory.below-rated-speed");
+    }
+
+    [Fact]
+    public void MemorySpeedIsUndeterminedWithNoModulesReported()
+    {
+        var profile = TestProfiles.Profile(memoryModules: Array.Empty<MemoryModuleInfo>());
+
+        var report = new RecommendationEngine().Analyze(Context(profile));
+
+        Assert.Contains(report.Undetermined, outcome => outcome.RuleId == "rec.memory.below-rated-speed");
+    }
+
+    [Fact]
+    public void MemorySpeedReportsEveryUnderclockedModuleNotJustTheFirst()
+    {
+        var profile = TestProfiles.Profile(memoryModules: new[]
+        {
+            new MemoryModuleInfo("A", "V", "P1", 16UL * 1024 * 1024 * 1024, 6000, 4800),
+            new MemoryModuleInfo("B", "V", "P2", 16UL * 1024 * 1024 * 1024, 6000, 4800),
+            new MemoryModuleInfo("C", "V", "P3", 16UL * 1024 * 1024 * 1024, 6000, 6000)
+        });
+
+        var report = new RecommendationEngine().Analyze(Context(profile));
+
+        var recommendation = Assert.Single(report.Recommendations.Where(r => r.Id == "rec.memory.below-rated-speed"));
+        Assert.Equal(2, recommendation.Evidence.Count);
+    }
+
+    // ---- Scheduler priority separation -------------------------------------------------------
+
+    [Fact]
+    public void SchedulerRuleIsQuietWhenTheTweakIsAlreadyApplied()
+    {
+        var states = TestProfiles.AllNotApplied();
+        states["system.win32-priority-separation"] = TweakState.Applied;
+
+        var report = new RecommendationEngine().Analyze(Context(tweakStates: states));
+
+        Assert.DoesNotContain(report.Recommendations, r => r.Id == "rec.system.scheduler-priority-separation");
+    }
+
+    [Fact]
+    public void SchedulerRuleFiresWhenTheValueDeviatesFromClientDefault()
+    {
+        var states = TestProfiles.AllNotApplied();
+        states["system.win32-priority-separation"] = TweakState.NotApplied;
+
+        var report = new RecommendationEngine().Analyze(Context(tweakStates: states));
+
+        var recommendation = Assert.Single(
+            report.Recommendations.Where(r => r.Id == "rec.system.scheduler-priority-separation"));
+        Assert.Equal("system.win32-priority-separation",
+            ((RecommendedAction.ApplyTweak)recommendation.Action).TweakId);
+    }
+
+    [Fact]
+    public void SchedulerRuleIsSkippedOnServerEditions()
+    {
+        var states = TestProfiles.AllNotApplied();
+        states["system.win32-priority-separation"] = TweakState.NotApplied;
+        var windows = TestProfiles.Windows(editionId: "ServerStandard");
+
+        var report = new RecommendationEngine().Analyze(Context(
+            TestProfiles.Profile(windows: windows), tweakStates: states));
+
+        Assert.DoesNotContain(report.Recommendations, r => r.Id == "rec.system.scheduler-priority-separation");
+        Assert.Contains(report.NotApplicable, outcome =>
+            outcome.RuleId == "rec.system.scheduler-priority-separation" && outcome.Reason.Contains("Server"));
+    }
+
+    [Fact]
+    public void SchedulerRuleIsUndeterminedWhenStateCannotBeRead()
+    {
+        var states = TestProfiles.AllNotApplied();
+        states["system.win32-priority-separation"] = TweakState.Unknown;
+
+        var report = new RecommendationEngine().Analyze(Context(tweakStates: states));
+
+        Assert.Contains(report.Undetermined, outcome => outcome.RuleId == "rec.system.scheduler-priority-separation");
+    }
+
     [Fact]
     public void AffinityIsSkippedWhenAPolicyIsAlreadySet()
     {

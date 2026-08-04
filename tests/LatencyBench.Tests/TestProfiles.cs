@@ -84,7 +84,8 @@ public static class TestProfiles
         FeatureState hags = FeatureState.Disabled,
         bool hagsSupported = true,
         bool modernStandby = false,
-        bool virtualMachine = false) => new()
+        bool virtualMachine = false,
+        string editionId = "Professional") => new()
         {
             ProductName = "Windows 11 Pro",
             DisplayVersion = "24H2",
@@ -92,7 +93,7 @@ public static class TestProfiles
             MinorVersion = 0,
             BuildNumber = build,
             UpdateBuildRevision = 1000,
-            EditionId = "Professional",
+            EditionId = editionId,
             HardwareAcceleratedGpuScheduling = hags,
             SupportsHardwareAcceleratedGpuScheduling = hagsSupported,
             VirtualizationBasedSecurity = vbs,
@@ -110,7 +111,8 @@ public static class TestProfiles
         int usbDevicesOnBusiest = 6,
         int networkAdapters = 1,
         IReadOnlyList<GpuInfo>? gpus = null,
-        IReadOnlyList<UsbHostControllerSummary>? usbControllerOverride = null)
+        IReadOnlyList<UsbHostControllerSummary>? usbControllerOverride = null,
+        IReadOnlyList<MemoryModuleInfo>? memoryModules = null)
     {
         topology ??= Topology();
 
@@ -171,6 +173,11 @@ public static class TestProfiles
             AudioDevices = Array.Empty<AudioDeviceInfo>(),
             UsbControllers = controllers,
             NetworkAdapters = adapters,
+            MemoryModules = memoryModules ?? new[]
+            {
+                new MemoryModuleInfo("P0 CHANNEL A", "Test Manufacturer", "TEST-DIMM-1", 16UL * 1024 * 1024 * 1024, 6000, 6000),
+                new MemoryModuleInfo("P0 CHANNEL B", "Test Manufacturer", "TEST-DIMM-2", 16UL * 1024 * 1024 * 1024, 6000, 6000)
+            },
             HasBattery = hasBattery,
             CapturedAt = DateTimeOffset.UtcNow,
             Warnings = Array.Empty<string>()
@@ -193,7 +200,12 @@ public static class TestProfiles
         ["network.disable-nagle"] = TweakState.NotApplied,
         ["network.disable-power-management"] = TweakState.NotApplied,
         ["network.throttling-index"] = TweakState.NotApplied,
-        ["aggressive.sysmain-disable"] = TweakState.NotApplied
+        ["aggressive.sysmain-disable"] = TweakState.NotApplied,
+        ["mmcss.games-scheduling-category"] = TweakState.NotApplied,
+        ["mmcss.games-sfio-priority"] = TweakState.NotApplied,
+        ["timer.global-resolution-requests"] = TweakState.NotApplied,
+        ["storage.disable-last-access-timestamps"] = TweakState.NotApplied,
+        ["system.win32-priority-separation"] = TweakState.NotApplied
     };
 
     public static Dictionary<string, TweakState> AllApplied() =>

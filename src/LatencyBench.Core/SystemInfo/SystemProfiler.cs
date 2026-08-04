@@ -32,6 +32,7 @@ public sealed class SystemProfiler
     private readonly UsbTreeEnumerator _usbTreeEnumerator;
     private readonly NetworkAdapterEnumerator _networkEnumerator;
     private readonly DeviceGuardReader _deviceGuardReader;
+    private readonly MemoryModuleReader _memoryModuleReader;
 
     private readonly SemaphoreSlim _refreshGate = new(1, 1);
 
@@ -45,9 +46,11 @@ public sealed class SystemProfiler
         StorageEnumerator? storageEnumerator = null,
         UsbTreeEnumerator? usbTreeEnumerator = null,
         NetworkAdapterEnumerator? networkEnumerator = null,
-        DeviceGuardReader? deviceGuardReader = null)
+        DeviceGuardReader? deviceGuardReader = null,
+        MemoryModuleReader? memoryModuleReader = null)
     {
         _deviceGuardReader = deviceGuardReader ?? new DeviceGuardReader();
+        _memoryModuleReader = memoryModuleReader ?? new MemoryModuleReader();
         _cpuReader = cpuReader ?? new CpuInfoReader();
         _windowsReader = windowsReader ?? new WindowsInfoReader();
         _motherboardReader = motherboardReader ?? new MotherboardReader();
@@ -125,6 +128,9 @@ public sealed class SystemProfiler
         IReadOnlyList<NetworkAdapterSummary> network = Probe<IReadOnlyList<NetworkAdapterSummary>>(
             warnings, "network adapters", ReadNetworkAdapters, Array.Empty<NetworkAdapterSummary>);
 
+        IReadOnlyList<MemoryModuleInfo> memoryModules = Probe<IReadOnlyList<MemoryModuleInfo>>(
+            warnings, "memory modules", _memoryModuleReader.Read, Array.Empty<MemoryModuleInfo>);
+
         return new SystemProfile
         {
             Cpu = cpu,
@@ -136,6 +142,7 @@ public sealed class SystemProfiler
             AudioDevices = audio,
             UsbControllers = usb,
             NetworkAdapters = network,
+            MemoryModules = memoryModules,
             HasBattery = Probe(warnings, "battery presence", ReadHasBattery, () => false),
             CapturedAt = DateTimeOffset.UtcNow,
             Warnings = warnings
