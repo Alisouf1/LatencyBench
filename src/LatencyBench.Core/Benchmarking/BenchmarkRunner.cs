@@ -22,65 +22,65 @@ namespace LatencyBench.Core.Benchmarking;
 /// </summary>
 public sealed class BenchmarkRunner
 {
-	/// <summary>How often a reading is taken during a capture window.</summary>
-	public static readonly TimeSpan SampleInterval = TimeSpan.FromMilliseconds(500);
+    /// <summary>How often a reading is taken during a capture window.</summary>
+    public static readonly TimeSpan SampleInterval = TimeSpan.FromMilliseconds(500);
 
-	/// <summary>Default capture length. Long enough to average out a couple of outlier samples,
-	/// short enough that measuring twice does not make applying a profile feel slow.</summary>
-	public static readonly TimeSpan DefaultDuration = TimeSpan.FromSeconds(8);
+    /// <summary>Default capture length. Long enough to average out a couple of outlier samples,
+    /// short enough that measuring twice does not make applying a profile feel slow.</summary>
+    public static readonly TimeSpan DefaultDuration = TimeSpan.FromSeconds(8);
 
-	private readonly Func<ICounterSource> _counterSourceFactory;
+    private readonly Func<ICounterSource> _counterSourceFactory;
 
-	public BenchmarkRunner(Func<ICounterSource>? counterSourceFactory = null)
-	{
-		_counterSourceFactory = counterSourceFactory ?? (() => new PerformanceCounterSource());
-	}
+    public BenchmarkRunner(Func<ICounterSource>? counterSourceFactory = null)
+    {
+        _counterSourceFactory = counterSourceFactory ?? (() => new PerformanceCounterSource());
+    }
 
-	/// <summary>
-	/// Captures one snapshot. A fresh counter source is opened and disposed for each call rather than
-	/// reused across a whole before/after pair — the machine's state changes between the two calls
-	/// (that is the entire point), and the rate counters need re-priming regardless, so there is no
-	/// benefit to holding the handles open across the gap.
-	/// </summary>
-	public async Task<BenchmarkSnapshot> CaptureAsync(
-		TimeSpan? duration = null,
-		IProgress<TimeSpan>? progress = null,
-		CancellationToken cancellationToken = default)
-	{
-		TimeSpan window = duration ?? DefaultDuration;
-		DateTimeOffset startedAt = DateTimeOffset.UtcNow;
+    /// <summary>
+    /// Captures one snapshot. A fresh counter source is opened and disposed for each call rather than
+    /// reused across a whole before/after pair — the machine's state changes between the two calls
+    /// (that is the entire point), and the rate counters need re-priming regardless, so there is no
+    /// benefit to holding the handles open across the gap.
+    /// </summary>
+    public async Task<BenchmarkSnapshot> CaptureAsync(
+        TimeSpan? duration = null,
+        IProgress<TimeSpan>? progress = null,
+        CancellationToken cancellationToken = default)
+    {
+        TimeSpan window = duration ?? DefaultDuration;
+        DateTimeOffset startedAt = DateTimeOffset.UtcNow;
 
-		using ICounterSource source = _counterSourceFactory();
-		source.Prime();
+        using ICounterSource source = _counterSourceFactory();
+        source.Prime();
 
-		// The rate counters' first real read needs at least one interval to have elapsed since
-		// priming, otherwise it reports the average since process start rather than since now.
-		await Task.Delay(SampleInterval, cancellationToken).ConfigureAwait(false);
+        // The rate counters' first real read needs at least one interval to have elapsed since
+        // priming, otherwise it reports the average since process start rather than since now.
+        await Task.Delay(SampleInterval, cancellationToken).ConfigureAwait(false);
 
-		var readings = new List<(double Interrupt, double Dpc, double Processor, double AvailableMemory)>();
-		DateTime deadline = DateTime.UtcNow + window;
+        var readings = new List<(double Interrupt, double Dpc, double Processor, double AvailableMemory)>();
+        DateTime deadline = DateTime.UtcNow + window;
 
-		while (DateTime.UtcNow < deadline)
-		{
-			cancellationToken.ThrowIfCancellationRequested();
+        while (DateTime.UtcNow < deadline)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
 
-			var (interrupt, dpc, processor) = source.SampleCpu();
-			double availableMemory = source.SampleAvailableMemoryPercent();
-			readings.Add((interrupt, dpc, processor, availableMemory));
+            var (interrupt, dpc, processor) = source.SampleCpu();
+            double availableMemory = source.SampleAvailableMemoryPercent();
+            readings.Add((interrupt, dpc, processor, availableMemory));
 
-			progress?.Report(deadline - DateTime.UtcNow);
+            progress?.Report(deadline - DateTime.UtcNow);
 
-			await Task.Delay(SampleInterval, cancellationToken).ConfigureAwait(false);
-		}
+            await Task.Delay(SampleInterval, cancellationToken).ConfigureAwait(false);
+        }
 
-		// The loop can exit with zero readings if the window is shorter than one sample interval —
-		// take one final reading rather than failing to build a snapshot at all.
-		if (readings.Count == 0)
-		{
-			var (interrupt, dpc, processor) = source.SampleCpu();
-			readings.Add((interrupt, dpc, processor, source.SampleAvailableMemoryPercent()));
-		}
+        // The loop can exit with zero readings if the window is shorter than one sample interval —
+        // take one final reading rather than failing to build a snapshot at all.
+        if (readings.Count == 0)
+        {
+            var (interrupt, dpc, processor) = source.SampleCpu();
+            readings.Add((interrupt, dpc, processor, source.SampleAvailableMemoryPercent()));
+        }
 
-		return BenchmarkSnapshot.FromReadings(startedAt, window, readings);
-	}
+        return BenchmarkSnapshot.FromReadings(startedAt, window, readings);
+    }
 }

@@ -26,120 +26,120 @@ namespace LatencyBench.Core.Tweaks.Storage;
 /// </summary>
 public sealed class LastAccessTimestampTweak : ITweak
 {
-	private const string BackupKey = "fsutil:disablelastaccess";
+    private const string BackupKey = "fsutil:disablelastaccess";
 
-	private static readonly Regex ValuePattern = new(@"DisableLastAccess\s*=\s*(\d+)", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+    private static readonly Regex ValuePattern = new(@"DisableLastAccess\s*=\s*(\d+)", RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
-	private readonly TweakBackupStore _backupStore;
+    private readonly TweakBackupStore _backupStore;
 
-	private readonly Func<string, string[], (int ExitCode, string StdOut, string StdErr)> _runFsutil;
+    private readonly Func<string, string[], (int ExitCode, string StdOut, string StdErr)> _runFsutil;
 
-	public TweakDefinition Definition { get; } = new TweakDefinition
-	{
-		Id = "storage.disable-last-access-timestamps",
-		Category = TweakCategory.Ssd,
-		Name = "Disable NTFS last-access timestamps",
-		Description = "Stops NTFS updating a file's last-accessed time on every read, removing a metadata write from every file read on every fixed drive.",
-		Risk = TweakRisk.Safe
-	};
+    public TweakDefinition Definition { get; } = new TweakDefinition
+    {
+        Id = "storage.disable-last-access-timestamps",
+        Category = TweakCategory.Ssd,
+        Name = "Disable NTFS last-access timestamps",
+        Description = "Stops NTFS updating a file's last-accessed time on every read, removing a metadata write from every file read on every fixed drive.",
+        Risk = TweakRisk.Safe
+    };
 
-	public LastAccessTimestampTweak(TweakBackupStore backupStore)
-		: this(backupStore, ConsoleToolRunner.Run)
-	{
-	}
+    public LastAccessTimestampTweak(TweakBackupStore backupStore)
+        : this(backupStore, ConsoleToolRunner.Run)
+    {
+    }
 
-	/// <summary>Seam for tests: substitutes a fake fsutil invocation so Apply/Revert can be exercised
-	/// without touching this machine's actual NTFS timestamp behaviour. Every real caller uses the
-	/// constructor above.</summary>
-	public LastAccessTimestampTweak(
-		TweakBackupStore backupStore,
-		Func<string, string[], (int ExitCode, string StdOut, string StdErr)> runFsutil)
-	{
-		_backupStore = backupStore;
-		_runFsutil = runFsutil;
-	}
+    /// <summary>Seam for tests: substitutes a fake fsutil invocation so Apply/Revert can be exercised
+    /// without touching this machine's actual NTFS timestamp behaviour. Every real caller uses the
+    /// constructor above.</summary>
+    public LastAccessTimestampTweak(
+        TweakBackupStore backupStore,
+        Func<string, string[], (int ExitCode, string StdOut, string StdErr)> runFsutil)
+    {
+        _backupStore = backupStore;
+        _runFsutil = runFsutil;
+    }
 
-	public TweakState GetState()
-	{
-		int? current = ReadCurrentValue();
-		if (current is null)
-		{
-			return TweakState.Unknown;
-		}
+    public TweakState GetState()
+    {
+        int? current = ReadCurrentValue();
+        if (current is null)
+        {
+            return TweakState.Unknown;
+        }
 
-		// Only an explicit 1 (always disabled) counts as applied. 2 (system-managed) currently behaves
-		// as enabled on a default Windows install, but "currently behaves as" is not the same
-		// guarantee as "explicitly turned off", so it is treated as not-yet-applied rather than
-		// silently accepted as equivalent.
-		return current == 1 ? TweakState.Applied : TweakState.NotApplied;
-	}
+        // Only an explicit 1 (always disabled) counts as applied. 2 (system-managed) currently behaves
+        // as enabled on a default Windows install, but "currently behaves as" is not the same
+        // guarantee as "explicitly turned off", so it is treated as not-yet-applied rather than
+        // silently accepted as equivalent.
+        return current == 1 ? TweakState.Applied : TweakState.NotApplied;
+    }
 
-	public void Apply()
-	{
-		int? previous = ReadCurrentValue();
-		if (!previous.HasValue)
-		{
-			throw new InvalidOperationException(
-				"Could not determine the current last-access timestamp behaviour, so applying this tweak " +
-				"would risk being unable to revert it later. fsutil's query did not return a recognizable value.");
-		}
+    public void Apply()
+    {
+        int? previous = ReadCurrentValue();
+        if (!previous.HasValue)
+        {
+            throw new InvalidOperationException(
+                "Could not determine the current last-access timestamp behaviour, so applying this tweak " +
+                "would risk being unable to revert it later. fsutil's query did not return a recognizable value.");
+        }
 
-		if (previous.Value != 1)
-		{
-			_backupStore.Save(BackupKey, previous.Value.ToString());
-		}
+        if (previous.Value != 1)
+        {
+            _backupStore.Save(BackupKey, previous.Value.ToString());
+        }
 
-		WriteValue(1, "disable");
-	}
+        WriteValue(1, "disable");
+    }
 
-	public void Revert()
-	{
-		string? saved = _backupStore.TryGet(BackupKey);
-		if (saved is null)
-		{
-			// Already explicitly disabled before this app touched it — no known prior value to
-			// restore safely, so nothing is changed.
-			return;
-		}
+    public void Revert()
+    {
+        string? saved = _backupStore.TryGet(BackupKey);
+        if (saved is null)
+        {
+            // Already explicitly disabled before this app touched it — no known prior value to
+            // restore safely, so nothing is changed.
+            return;
+        }
 
-		if (!int.TryParse(saved, out int value))
-		{
-			throw new InvalidOperationException($"The saved backup for '{Definition.Name}' is invalid.");
-		}
+        if (!int.TryParse(saved, out int value))
+        {
+            throw new InvalidOperationException($"The saved backup for '{Definition.Name}' is invalid.");
+        }
 
-		WriteValue(value, "restore");
-		_backupStore.Remove(BackupKey);
-	}
+        WriteValue(value, "restore");
+        _backupStore.Remove(BackupKey);
+    }
 
-	private void WriteValue(int value, string action)
-	{
-		var (exitCode, _, stdErr) = Run("behavior", "set", "disablelastaccess", value.ToString());
-		if (exitCode != 0)
-		{
-			throw new InvalidOperationException($"Could not {action} last-access timestamp behaviour: {stdErr.Trim()}");
-		}
+    private void WriteValue(int value, string action)
+    {
+        var (exitCode, _, stdErr) = Run("behavior", "set", "disablelastaccess", value.ToString());
+        if (exitCode != 0)
+        {
+            throw new InvalidOperationException($"Could not {action} last-access timestamp behaviour: {stdErr.Trim()}");
+        }
 
-		int? current = ReadCurrentValue();
-		if (current != value)
-		{
-			throw new InvalidOperationException($"fsutil reported success but DisableLastAccess is not {value}.");
-		}
-	}
+        int? current = ReadCurrentValue();
+        if (current != value)
+        {
+            throw new InvalidOperationException($"fsutil reported success but DisableLastAccess is not {value}.");
+        }
+    }
 
-	private int? ReadCurrentValue()
-	{
-		var (exitCode, stdOut, _) = Run("behavior", "query", "disablelastaccess");
-		if (exitCode != 0)
-		{
-			return null;
-		}
+    private int? ReadCurrentValue()
+    {
+        var (exitCode, stdOut, _) = Run("behavior", "query", "disablelastaccess");
+        if (exitCode != 0)
+        {
+            return null;
+        }
 
-		Match match = ValuePattern.Match(stdOut);
-		return match.Success && int.TryParse(match.Groups[1].Value, out int value) ? value : null;
-	}
+        Match match = ValuePattern.Match(stdOut);
+        return match.Success && int.TryParse(match.Groups[1].Value, out int value) ? value : null;
+    }
 
-	private (int ExitCode, string StdOut, string StdErr) Run(params string[] arguments)
-	{
-		return _runFsutil("fsutil.exe", arguments);
-	}
+    private (int ExitCode, string StdOut, string StdErr) Run(params string[] arguments)
+    {
+        return _runFsutil("fsutil.exe", arguments);
+    }
 }
