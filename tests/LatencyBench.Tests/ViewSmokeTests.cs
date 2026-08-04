@@ -87,6 +87,40 @@ public class ViewSmokeTests
     }
 
     [Fact]
+    public void OptimizeViewRendersTheBenchmarkComparisonPanel()
+    {
+        // The before/after panel is hidden until BenchmarkResult is set, so the smoke tests above never
+        // touch its template — a real 16-second apply-with-measurement round trip is not something a
+        // fast test suite should run. Building the view-model result directly and assigning it exercises
+        // the same binding and DataTemplate without paying for the real capture.
+        RunOnStaThread(() =>
+        {
+            var comparisonResult = LatencyBench.Core.Benchmarking.BenchmarkComparer.Compare(
+                new LatencyBench.Core.Benchmarking.Models.BenchmarkSnapshot(
+                    DateTimeOffset.UtcNow, TimeSpan.FromSeconds(8), 16, 8.0, 15.0, 8.0, 15.0, 30.0, 40.0),
+                new LatencyBench.Core.Benchmarking.Models.BenchmarkSnapshot(
+                    DateTimeOffset.UtcNow, TimeSpan.FromSeconds(8), 16, 2.0, 4.0, 2.0, 4.0, 25.0, 60.0));
+
+            var viewModel = new OptimizeViewModel(
+                new LatencyBench.Core.Recommendations.RecommendationService(
+                    new LatencyBench.Core.SystemInfo.SystemProfiler()),
+                new LatencyBench.Core.DpcIsr.DpcIsrHistoryStore(),
+                new LatencyBench.Core.Affinity.InterruptAffinityService(),
+                new LatencyBench.Core.Msi.InterruptDeviceService())
+            {
+                BenchmarkResult = new BenchmarkComparisonViewModel(comparisonResult)
+            };
+
+            var view = new OptimizeView { DataContext = viewModel };
+            view.Measure(new Size(1200, 4000));
+            view.Arrange(new Rect(0, 0, 1200, 4000));
+
+            Assert.NotNull(view.Content);
+            Assert.NotEmpty(viewModel.BenchmarkResult!.MetricLines);
+        });
+    }
+
+    [Fact]
     public void OptimizeViewRendersAPopulatedPlan()
     {
         // The previous test only proves the page frame renders. Every item template — the plan steps

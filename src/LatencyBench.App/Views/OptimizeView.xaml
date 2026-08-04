@@ -64,8 +64,19 @@
                                TextWrapping="Wrap" Margin="0,0,0,8"
                                Visibility="{Binding PlanSummary, Converter={StaticResource StringToVisibilityConverter}}"/>
 
+                    <!-- Why Apply is greyed out. An empty plan is a normal, healthy outcome, but a
+                         disabled button with no stated reason is indistinguishable from a broken page. -->
+                    <TextBlock Text="{Binding ApplyDisabledReason}" Style="{StaticResource SecondaryText}"
+                               TextWrapping="Wrap" Margin="0,0,0,8"
+                               Visibility="{Binding ApplyDisabledReason, Converter={StaticResource StringToVisibilityConverter}}"/>
+
                     <CheckBox Content="Create a System Restore point first" IsChecked="{Binding CreateRestorePoint}" Margin="0,0,0,6"/>
-                    <CheckBox Content="Advanced mode — choose each change individually" IsChecked="{Binding AdvancedMode}"/>
+                    <CheckBox Content="Advanced mode — choose each change individually" IsChecked="{Binding AdvancedMode}" Margin="0,0,0,6"/>
+                    <CheckBox IsChecked="{Binding MeasureBeforeAfter}">
+                        <CheckBox.Content>
+                            <TextBlock Text="Measure before/after (about 16 seconds added to Apply)" TextWrapping="Wrap"/>
+                        </CheckBox.Content>
+                    </CheckBox>
                 </StackPanel>
             </Border>
 
@@ -124,6 +135,27 @@
                 </ItemsControl.ItemTemplate>
             </ItemsControl>
 
+            <!-- Before/after measurement -->
+            <Border Style="{StaticResource CardBorder}" Margin="0,0,0,12"
+                    Visibility="{Binding BenchmarkResult, Converter={StaticResource NullToVisibleConverter}}">
+                <StackPanel>
+                    <TextBlock Text="Before / after" Style="{StaticResource BodyText}" FontWeight="Medium" Margin="0,0,0,6"/>
+                    <TextBlock Text="{Binding BenchmarkResult.Headline}" Style="{StaticResource BodyText}" TextWrapping="Wrap" Margin="0,0,0,6"/>
+                    <TextBlock Style="{StaticResource SecondaryText}" TextWrapping="Wrap" Margin="0,0,0,8">
+                        <Run Text="{Binding BenchmarkResult.BeforeLabel, Mode=OneWay}"/>
+                        <Run Text="  ·  "/>
+                        <Run Text="{Binding BenchmarkResult.AfterLabel, Mode=OneWay}"/>
+                    </TextBlock>
+                    <ItemsControl ItemsSource="{Binding BenchmarkResult.MetricLines}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <TextBlock Text="{Binding}" Style="{StaticResource SecondaryText}" TextWrapping="Wrap" Margin="0,1,0,0"/>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
+            </Border>
+
             <!-- Results -->
             <Border Style="{StaticResource CardBorder}" Margin="0,0,0,12"
                     Visibility="{Binding ResultSummary, Converter={StaticResource StringToVisibilityConverter}}">
@@ -173,15 +205,22 @@
             <Border Style="{StaticResource CardBorder}"
                     Visibility="{Binding NonFindings.Count, Converter={StaticResource ZeroToVisibleConverter}, ConverterParameter=Invert}">
                 <StackPanel>
-                    <TextBlock Text="Checks that found nothing to do" Style="{StaticResource BodyText}" FontWeight="Medium" Margin="0,0,0,4"/>
+                    <TextBlock Text="Checks that found nothing to change" Style="{StaticResource BodyText}" FontWeight="Medium" Margin="0,0,0,4"/>
                     <TextBlock Style="{StaticResource SecondaryText}" TextWrapping="Wrap" Margin="0,0,0,8"
-                               Text="Every check runs every time. These are listed so you can see what was examined, not just what was found."/>
+                               Text="Every check runs every time. These are listed so you can see what was examined, not just what was found. Anything marked below is waiting on a measurement rather than settled — running the test it names may turn it into a real recommendation."/>
                     <ItemsControl ItemsSource="{Binding NonFindings}">
                         <ItemsControl.ItemTemplate>
                             <DataTemplate DataType="{x:Type vm:NonFindingViewModel}">
                                 <StackPanel Margin="0,0,0,8">
                                     <TextBlock Text="{Binding Title}" Style="{StaticResource BodyText}" TextWrapping="Wrap"/>
                                     <TextBlock Text="{Binding Reason}" Style="{StaticResource SecondaryText}" TextWrapping="Wrap"/>
+                                    <!-- NeedsMeasurement was computed for every check and then never
+                                         rendered anywhere, so "I could not decide until you measure X"
+                                         looked identical to "checked it, nothing needed". -->
+                                    <TextBlock Text="Undetermined — needs a measurement before this can be judged."
+                                               Style="{StaticResource SecondaryText}" TextWrapping="Wrap"
+                                               Foreground="{StaticResource WarningBrush}"
+                                               Visibility="{Binding NeedsMeasurement, Converter={StaticResource BoolToVisibleConverter}}"/>
                                 </StackPanel>
                             </DataTemplate>
                         </ItemsControl.ItemTemplate>
