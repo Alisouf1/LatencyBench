@@ -1,3 +1,4 @@
+using LatencyBench.Core.Diagnostics;
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -104,9 +105,15 @@ public sealed partial class TweaksViewModel : ObservableObject
     {
         if (IsLoading)
         {
+            // Never a silent refusal. Every control on this page binds IsEnabled to IsLoading, so a
+            // flag that sticks leaves the button dead with no message - the same failure that made
+            // Optimize's Re-analyse look unwired. Saying so costs nothing and removes the ambiguity.
+            DiagnosticLog.Warn("Tweaks", "Apply-all refused: a previous batch is still in progress.");
+            BatchActionStatus = "Still finishing the previous batch — try again in a moment.";
             return;
         }
 
+        DiagnosticLog.Info("Tweaks", "Apply-all starting.");
         IsLoading = true;
         try
         {
@@ -158,9 +165,12 @@ public sealed partial class TweaksViewModel : ObservableObject
     {
         if (IsLoading)
         {
+            DiagnosticLog.Warn("Tweaks", "Revert-all refused: a previous batch is still in progress.");
+            BatchActionStatus = "Still finishing the previous batch — try again in a moment.";
             return;
         }
 
+        DiagnosticLog.Info("Tweaks", "Revert-all starting.");
         IsLoading = true;
         try
         {

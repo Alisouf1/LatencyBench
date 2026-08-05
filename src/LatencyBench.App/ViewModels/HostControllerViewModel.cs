@@ -1,3 +1,4 @@
+using LatencyBench.Core.Diagnostics;
 using System.Collections.ObjectModel;
 using System.Windows;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -138,6 +139,12 @@ public sealed partial class HostControllerViewModel : ObservableObject
     {
         if (IsBusy)
         {
+            // Returns false rather than staying silent, so "Apply all" counts it rather than
+            // skipping it invisibly. Logged because a refusal that only shows up as a count is hard
+            // to tell apart from a device that genuinely failed to write.
+            DiagnosticLog.Warn(
+                "Affinity",
+                $"Save refused for '{ControllerLabel}': a previous operation is still in progress.");
             return false;
         }
 
@@ -175,6 +182,10 @@ public sealed partial class HostControllerViewModel : ObservableObject
     {
         if (IsBusy)
         {
+            // See the equivalent guards in TweaksViewModel: a refusal that produces no message is
+            // indistinguishable from a control that is not wired up.
+            DiagnosticLog.Warn("Affinity", "Clear-override refused: a previous operation is still in progress.");
+            StatusMessage = "Still finishing the previous operation — try again in a moment.";
             return;
         }
 
