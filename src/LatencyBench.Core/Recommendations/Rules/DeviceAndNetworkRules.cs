@@ -229,7 +229,7 @@ public sealed class PointerPrecisionRule : IRecommendationRule
         {
             Id = Id,
             Title = Title,
-            Category = RecommendationCategory.System,
+            Category = RecommendationCategory.Input,
             Reasoning =
                 "Enhance pointer precision is mouse acceleration: Windows scales the pointer movement by how " +
                 "fast the mouse is travelling, so the same physical distance produces a different cursor " +

@@ -14,6 +14,17 @@ public enum RecommendationCategory
     Usb,
     Security,
     Drivers,
+
+    /// <summary>
+    /// Mouse and keyboard behaviour. Added because there was previously no input category at all, so
+    /// the pointer-acceleration recommendation was filed under <see cref="System"/> — and profiles
+    /// filter by category. Productivity accepts System (it wants the timer and scheduler checks), so
+    /// it silently accepted an input tweak it is explicitly designed to skip, and every profile ended
+    /// up planning exactly the same thing. Verified end-to-end: before this existed, all six profiles
+    /// produced identical plans for a machine with pointer acceleration on.
+    /// </summary>
+    Input,
+
     System
 }
 
