@@ -1,4 +1,5 @@
 using System.IO;
+using System.Text;
 
 namespace LatencyBench.Core.Persistence;
 
@@ -30,7 +31,26 @@ public static class AtomicFileWriter
         // Write-then-replace. Writing straight onto filePath would truncate it first, so an
         // interruption at that moment leaves an empty or partial file and whatever was in it before
         // is gone for good.
-        File.WriteAllText(temporaryPath, contents);
+        //
+        // Flush(flushToDisk: true) rather than File.WriteAllText: WriteAllText only flushes to the
+        // operating system's write cache when it closes the handle, so the data can still be in
+        // volatile memory when the replace below commits. NTFS journals the rename but not the file
+        // contents, so a power loss in that window leaves the metadata pointing at a file whose data
+        // never reached the platter - an intact-looking JSON file that is empty or truncated. Since
+        // this store is the only record of what to restore when a tweak is undone, losing it silently
+        // is worse than any cost of the flush. FlushFileBuffers is what makes the ordering real.
+        // UTF8Encoding(false), not Encoding.UTF8: the latter emits a byte-order mark, which
+        // File.WriteAllText did not. Switching to a StreamWriter without pinning this down would
+        // silently prepend a BOM to every store this writes, and a strict JSON reader treats those
+        // three bytes as content rather than an encoding hint.
+        using (var stream = new FileStream(
+            temporaryPath, FileMode.Create, FileAccess.Write, FileShare.None))
+        using (var writer = new StreamWriter(stream, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false)))
+        {
+            writer.Write(contents);
+            writer.Flush();
+            stream.Flush(flushToDisk: true);
+        }
 
         if (File.Exists(filePath))
         {
