@@ -1,4 +1,5 @@
 using LatencyBench.Core.Diagnostics;
+using System.Threading;
 using System.IO;
 using System.Collections.Concurrent;
 using System.Collections.ObjectModel;
@@ -21,7 +22,35 @@ public sealed partial class DpcIsrViewModel : ObservableObject, IDisposable
     private const double BorderlineSpikeMicroseconds = 100;
 
     private readonly DpcIsrTraceSession _session = new();
+
+    /// <summary>
+    /// Hand-off from the ETW processing thread to the UI drain timer.
+    /// <para>
+    /// Shared state: enqueued by the single ETW callback thread, dequeued only by
+    /// <see cref="DrainPending"/> on the UI thread. <see cref="_pendingCount"/> and
+    /// <see cref="_droppedSamples"/> are maintained with interlocked operations because they are
+    /// touched from both. No lock is held across either side.
+    /// </para>
+    /// </summary>
     private readonly ConcurrentQueue<DpcIsrSample> _pending = new();
+
+    /// <summary>
+    /// Cap on unconsumed samples. The producer runs at kernel interrupt rates while the consumer is a
+    /// 150 ms timer on the UI thread, so any UI stall - a modal dialog, a slow render, another tab's
+    /// work - lets the queue grow without limit. Left unbounded this is an out-of-memory path on
+    /// exactly the busy machine a user would be tracing. At roughly 64 bytes per sample this ceiling
+    /// is about 13 MB, and around four seconds of headroom even at 50k events per second.
+    /// </summary>
+    private const int MaxPendingSamples = 200_000;
+
+    /// <summary>Current queue depth. Tracked separately because ConcurrentQueue.Count takes a
+    /// snapshot across segments, which is not something to pay for on every interrupt.</summary>
+    private int _pendingCount;
+
+    /// <summary>Samples discarded because the queue was full. Surfaced in the result rather than
+    /// hidden: dropped events understate the spike counts, so a trace that lost data must say so
+    /// instead of quietly reporting a better number than the machine earned.</summary>
+    private int _droppedSamples;
     private readonly DispatcherTimer _drainTimer;
     private readonly DispatcherTimer _countdownTimer;
     private readonly DpcIsrHistoryStore _historyStore;
@@ -101,7 +130,20 @@ public sealed partial class DpcIsrViewModel : ObservableObject, IDisposable
         _deviceEnumerator = deviceEnumerator;
         SavedTraces = historyStore.Results;
 
-        _session.SampleReceived += sample => _pending.Enqueue(sample);
+        // Runs on the ETW processing thread at interrupt rates. Bounded rather than unbounded: see
+        // MaxPendingSamples. Increment-then-check-then-decrement keeps this lock-free; the ceiling can
+        // be overshot momentarily by concurrent producers, which is harmless for a backpressure limit.
+        _session.SampleReceived += sample =>
+        {
+            if (Interlocked.Increment(ref _pendingCount) > MaxPendingSamples)
+            {
+                Interlocked.Decrement(ref _pendingCount);
+                Interlocked.Increment(ref _droppedSamples);
+                return;
+            }
+
+            _pending.Enqueue(sample);
+        };
 
         // ETW can fire hundreds of events per second on a busy system — draining on a timer
         // instead of dispatching to the UI thread per-sample keeps the UI responsive.
@@ -175,6 +217,15 @@ public sealed partial class DpcIsrViewModel : ObservableObject, IDisposable
         {
             _session.Start();
             DiagnosticLog.Info("DpcIsr", "ETW kernel session started successfully.");
+
+            // Every other accumulator was reset here but the hand-off queue was not, so any sample
+            // still in flight when the previous trace stopped - ETW flushes its buffers on Stop, and
+            // a late callback can land after the final drain - was counted against this trace instead.
+            // Cleared with the counters it feeds so a trace always starts from nothing.
+            _pending.Clear();
+            Interlocked.Exchange(ref _pendingCount, 0);
+            Interlocked.Exchange(ref _droppedSamples, 0);
+
             _driverStats.Clear();
             _coreEventCounts.Clear();
             TopDrivers.Clear();
@@ -246,7 +297,22 @@ public sealed partial class DpcIsrViewModel : ObservableObject, IDisposable
             DiagnosticLog.Info(
                 "DpcIsr",
                 $"Trace complete: {SampleCount} sample(s), peak DPC {HighestDpcMicroseconds}us, " +
-                $"peak ISR {HighestIsrMicroseconds}us, {_driverStats.Count} driver(s) resolved.");
+                $"peak ISR {HighestIsrMicroseconds}us, {_driverStats.Count} driver(s) resolved, " +
+                $"{Volatile.Read(ref _droppedSamples)} dropped.");
+        }
+
+        int dropped = Volatile.Read(ref _droppedSamples);
+        if (dropped > 0)
+        {
+            // Stated plainly rather than buried: dropped events understate every count below, so the
+            // numbers are a floor, not a measurement. Saying nothing would make this trace look
+            // better than the machine actually behaved.
+            DiagnosticLog.Warn("DpcIsr", $"{dropped} sample(s) were dropped because the queue was full.");
+            AnalysisMessage =
+                $"⚠ {dropped:N0} event(s) were dropped because they arrived faster than they could be " +
+                "processed. The figures below are therefore a lower bound — the real spike counts are " +
+                "higher. This happens when the machine is extremely busy, which is itself a finding." +
+                Environment.NewLine + Environment.NewLine + AnalysisMessage;
         }
 
         var driverStats = _driverStats
@@ -277,6 +343,8 @@ public sealed partial class DpcIsrViewModel : ObservableObject, IDisposable
 
         while (_pending.TryDequeue(out var sample))
         {
+            Interlocked.Decrement(ref _pendingCount);
+
             if (sample.Kind == DpcIsrKind.Dpc)
             {
                 dpcCount++;
