@@ -129,13 +129,21 @@ public sealed class SingleInstanceMutexTests
 
         // A previous instance that exits without releasing — Task Manager "End task", or the crash
         // this fix removes — abandons the mutex rather than releasing it.
+        //
+        // The Mutex is held in a local outside the thread so it cannot be collected between the
+        // thread ending and the assertion below. Without that, the finalizer could close the handle,
+        // destroy the named mutex, and turn this into a test of creating a fresh one - which passes
+        // for the wrong reason and never exercises the abandoned path at all.
+        Mutex? abandoned = null;
         var abandoner = new Thread(() =>
         {
-            var m = new Mutex(initiallyOwned: true, name, out _);
+            abandoned = new Mutex(initiallyOwned: true, name, out _);
             // Deliberately no ReleaseMutex: the thread ends still holding it.
         });
         abandoner.Start();
         abandoner.Join();
+
+        Assert.NotNull(abandoned);
 
         using var next = new Mutex(initiallyOwned: true, name, out bool createdNew);
         if (createdNew)
@@ -146,7 +154,12 @@ public sealed class SingleInstanceMutexTests
         {
             try
             {
-                claimed = next.WaitOne(TimeSpan.Zero);
+                // Thread.Join returns when the managed thread ends, which is not the same instant the
+                // OS marks the mutex abandoned. In that window WaitOne returns false rather than
+                // throwing, so a single zero-timeout probe is genuinely racy - it failed roughly one
+                // run in three under load. A short bounded wait closes the window without weakening
+                // what is being asserted: that a crashed predecessor never locks the user out.
+                claimed = next.WaitOne(TimeSpan.FromSeconds(5));
             }
             catch (AbandonedMutexException)
             {
@@ -157,6 +170,8 @@ public sealed class SingleInstanceMutexTests
         }
 
         Assert.True(claimed);
+
+        abandoned!.Dispose();
 
         var release = Record.Exception(() => next.ReleaseMutex());
         Assert.Null(release);

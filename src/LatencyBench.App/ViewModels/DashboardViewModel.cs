@@ -1,3 +1,4 @@
+using LatencyBench.Core.Diagnostics;
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -127,9 +128,14 @@ public sealed partial class DashboardViewModel : ObservableObject
                 DiagnosisFindings.Add(finding);
             }
         }
-        catch
+        catch (Exception ex)
         {
-            // See comment above — intentionally swallowed.
+            // Still swallowed, for the reason above: this is fire-and-forget from CollectionChanged
+            // handlers, so rethrowing would surface as an unobserved task exception rather than
+            // anything the user could act on. But swallowing it silently meant a persistent failure
+            // here showed up only as an Action Plan that never updated, with nothing to diagnose it
+            // from. Logging costs nothing and turns that into an answerable question.
+            DiagnosticLog.Warn("Dashboard", $"Action plan refresh failed and was skipped: {ex}");
         }
     }
 
