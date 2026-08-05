@@ -51,23 +51,10 @@ public class ViewSmokeTests
         }
     }
 
-    private static readonly object ApplicationGate = new();
-
-    private static void EnsureApplication()
-    {
-        lock (ApplicationGate)
-        {
-            if (Application.Current is not null)
-            {
-                return;
-            }
-
-            // Constructing App loads App.xaml, which is where every converter and brush the views
-            // reference by StaticResource is registered.
-            var application = new LatencyBench.App.App();
-            application.InitializeComponent();
-        }
-    }
+    // Delegates to the process-wide gate in WpfTestHost. Keeping a second gate here would not be
+    // enough: xUnit runs test classes in parallel, so two classes with independent locks can still
+    // both decide the Application does not exist yet and race to create it.
+    private static void EnsureApplication() => WpfTestHost.EnsureApplication();
 
     [Fact]
     public void OptimizeViewLoadsAndBindsToItsViewModel()

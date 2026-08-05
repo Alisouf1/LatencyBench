@@ -22,6 +22,16 @@ public partial class App : Application
 
     private Mutex? _singleInstanceMutex;
 
+    /// <summary>
+    /// Whether this process actually owns <see cref="_singleInstanceMutex"/>, as opposed to merely
+    /// holding a handle to one another process owns. The two are not the same thing, and
+    /// ReleaseMutex() on a mutex you do not own throws ApplicationException rather than being a
+    /// no-op — which is exactly what happened to the second instance: it opened the existing mutex,
+    /// failed to acquire it, showed the "already running" notice, and then crashed on the way out
+    /// instead of exiting cleanly, because OnExit released unconditionally.
+    /// </summary>
+    private bool _ownsSingleInstanceMutex;
+
     protected override void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
@@ -60,7 +70,21 @@ public partial class App : Application
 
     protected override void OnExit(ExitEventArgs e)
     {
-        _singleInstanceMutex?.ReleaseMutex();
+        if (_ownsSingleInstanceMutex)
+        {
+            try
+            {
+                _singleInstanceMutex?.ReleaseMutex();
+            }
+            catch (ApplicationException)
+            {
+                // Ownership is per-thread, and OnExit is not contractually guaranteed to run on the
+                // same thread that acquired it. Failing to release is harmless here - Dispose below
+                // closes the handle, and the OS releases ownership when the process ends either way
+                // - so this must never be allowed to turn a normal shutdown into a crash.
+            }
+        }
+
         _singleInstanceMutex?.Dispose();
         base.OnExit(e);
     }
@@ -76,17 +100,23 @@ public partial class App : Application
         _singleInstanceMutex = new Mutex(initiallyOwned: true, SingleInstanceMutexName, out bool createdNew);
         if (createdNew)
         {
+            // initiallyOwned only actually grants ownership when this call created the mutex; when
+            // one already existed the flag is ignored, which is why ownership is tracked explicitly
+            // rather than assumed from the constructor argument.
+            _ownsSingleInstanceMutex = true;
             return true;
         }
 
         try
         {
-            return _singleInstanceMutex.WaitOne(TimeSpan.Zero);
+            _ownsSingleInstanceMutex = _singleInstanceMutex.WaitOne(TimeSpan.Zero);
+            return _ownsSingleInstanceMutex;
         }
         catch (AbandonedMutexException)
         {
             // The previous instance did not release it cleanly, but the mutex is not actually held
             // by anything now — this instance owns it as of the exception being thrown.
+            _ownsSingleInstanceMutex = true;
             return true;
         }
     }
