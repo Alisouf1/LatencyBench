@@ -28,7 +28,15 @@ public sealed class RestorePointServiceTests
 
     private sealed class ImmediateRestorePointService : RestorePointService
     {
-        protected override TimeSpan Timeout => TimeSpan.FromMilliseconds(50);
+        /// <summary>
+        /// Deliberately generous, unlike <see cref="HangingRestorePointService"/>'s 50ms. These two
+        /// cases are about the result being passed through faithfully, not about timing, and the work
+        /// is queued to the thread pool — so under a fully parallel test run, scheduling latency alone
+        /// could exceed a 50ms budget and time out a call that returns instantly, failing the test for
+        /// a reason that has nothing to do with the code under test. The core here returns immediately,
+        /// so a large timeout costs the suite nothing while removing that flakiness entirely.
+        /// </summary>
+        protected override TimeSpan Timeout => TimeSpan.FromSeconds(30);
 
         public bool Succeed { get; set; } = true;
 

@@ -60,6 +60,25 @@
                                 Command="{Binding ApplyCommand}" IsEnabled="{Binding HasPlan}"/>
                     </DockPanel>
 
+                    <!-- The per-profile verdict. This is the line that makes selecting a profile
+                         visibly do something on a PC where no profile has anything left to change:
+                         without it, an empty plan and a greyed-out Apply button are indistinguishable
+                         from a selector that is simply not wired up. Turns green once the selected
+                         profile has nothing left to do, so "finished" never reads as "broken". -->
+                    <TextBlock Text="{Binding ProfileStatusSummary}"
+                               TextWrapping="Wrap" Margin="0,0,0,8" FontWeight="Medium"
+                               Visibility="{Binding ProfileStatusSummary, Converter={StaticResource StringToVisibilityConverter}}">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock" BasedOn="{StaticResource BodyText}">
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding IsFullyOptimizedForProfile}" Value="True">
+                                        <Setter Property="Foreground" Value="{StaticResource SuccessBrush}"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
+
                     <TextBlock Text="{Binding PlanSummary}" Style="{StaticResource SecondaryText}"
                                TextWrapping="Wrap" Margin="0,0,0,8"
                                Visibility="{Binding PlanSummary, Converter={StaticResource StringToVisibilityConverter}}"/>

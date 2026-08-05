@@ -107,6 +107,65 @@ public sealed class OptimizeViewModelTests
     }
 
     [Fact]
+    public async Task AFullyTunedPcReportsTheProfileAsAppliedRatherThanShowingNothing()
+    {
+        // The reported symptom: on an already-optimised PC every profile plans zero steps and Apply
+        // is correctly greyed out, which is indistinguishable from a profile selector that does
+        // nothing. The status line is what makes the finished state legible as finished.
+        var vm = Create(Report(notApplicable: new[]
+        {
+            new RuleOutcome.NotApplicable("rec.a", "Check A", "Already configured."),
+            new RuleOutcome.NotApplicable("rec.b", "Check B", "Already configured."),
+            new RuleOutcome.NotApplicable("rec.c", "Check C", "Already configured."),
+        }));
+
+        await vm.AnalyzeCommand.ExecuteAsync(null);
+
+        Assert.Equal(3, vm.SatisfiedCheckCount);
+        Assert.True(vm.IsFullyOptimizedForProfile);
+        Assert.NotNull(vm.ProfileStatusSummary);
+        Assert.Contains("fully applied", vm.ProfileStatusSummary!, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("3", vm.ProfileStatusSummary!);
+    }
+
+    [Fact]
+    public async Task SwitchingProfileAlwaysProducesAVisibleResponseEvenWhenNothingIsPlanned()
+    {
+        // "Switching between profiles produces no changes" was the report. Every profile legitimately
+        // plans nothing on a tuned PC, so the guarantee that matters is that the page still visibly
+        // responds to the selection - naming the profile the user just picked.
+        var vm = Create(Report(notApplicable: new[]
+        {
+            new RuleOutcome.NotApplicable("rec.a", "Check A", "Already configured."),
+        }));
+
+        await vm.AnalyzeCommand.ExecuteAsync(null);
+
+        foreach (ProfileOptionViewModel profile in vm.Profiles)
+        {
+            vm.SelectedProfile = profile;
+
+            Assert.False(string.IsNullOrWhiteSpace(vm.ProfileStatusSummary));
+            Assert.StartsWith(profile.Name, vm.ProfileStatusSummary!, StringComparison.Ordinal);
+        }
+    }
+
+    [Fact]
+    public async Task MeasurementOnlyChecksAreNotCountedAsSatisfied()
+    {
+        // An Undetermined check has not been satisfied - it simply could not be judged. Counting it
+        // as applied would overstate how tuned the machine is.
+        var vm = Create(Report(
+            notApplicable: new[] { new RuleOutcome.NotApplicable("rec.a", "Check A", "Already configured.") },
+            undetermined: new[] { new RuleOutcome.Undetermined("rec.b", "Check B", "Run a trace first.") }));
+
+        await vm.AnalyzeCommand.ExecuteAsync(null);
+
+        Assert.Equal(1, vm.SatisfiedCheckCount);
+        Assert.Equal(1, vm.MeasurementPromptCount);
+    }
+
+    [Fact]
     public async Task AnalysisAlwaysClearsIsBusySoThePageCannotStayDisabled()
     {
         // Every control on the Optimize page binds IsEnabled to !IsBusy, so an IsBusy that never

@@ -97,6 +97,31 @@ public sealed partial class OptimizeViewModel : ObservableObject
     [ObservableProperty]
     private int _measurementPromptCount;
 
+    /// <summary>
+    /// How many checks are already in the state the selected profile wants. On a PC that has been
+    /// tuned already this is the entire report, and it is the single most important number on the
+    /// page: without it, "0 changes to apply" and a greyed-out Apply button look identical to a
+    /// profile selector that does nothing, which is exactly how a fully-optimised machine was
+    /// reported as a broken Optimize tab.
+    /// </summary>
+    [ObservableProperty]
+    private int _satisfiedCheckCount;
+
+    /// <summary>
+    /// The plain-language verdict for the selected profile — what it will change, or confirmation
+    /// that everything it manages is already in place. Always populated once an analysis exists, so
+    /// switching profiles always produces a visible response even when the resulting plan is empty.
+    /// </summary>
+    [ObservableProperty]
+    private string? _profileStatusSummary;
+
+    /// <summary>
+    /// True when the selected profile has nothing left to do and nothing failed — i.e. this PC is
+    /// already tuned for it. Drives the positive styling that distinguishes "all done" from "broken".
+    /// </summary>
+    [ObservableProperty]
+    private bool _isFullyOptimizedForProfile;
+
     private bool _loaded;
 
     /// <summary>Set for the duration of the post-apply refresh <see cref="RunApplyAsync"/> triggers,
@@ -245,10 +270,14 @@ public sealed partial class OptimizeViewModel : ObservableObject
 
         MeasurementPromptCount = NonFindings.Count(nonFinding => nonFinding.NeedsMeasurement);
 
+        SatisfiedCheckCount = NonFindings.Count(nonFinding => !nonFinding.NeedsMeasurement);
+
         if (_report is null || SelectedProfile is null)
         {
             HasPlan = false;
             PlanSummary = null;
+            ProfileStatusSummary = null;
+            IsFullyOptimizedForProfile = false;
             ApplyDisabledReason = "Run an analysis first — click Re-analyse.";
             return;
         }
@@ -269,6 +298,43 @@ public sealed partial class OptimizeViewModel : ObservableObject
         HasPlan = plan.Steps.Count > 0;
         PlanSummary = BuildPlanSummary(plan);
         ApplyDisabledReason = BuildApplyDisabledReason(plan);
+        IsFullyOptimizedForProfile = plan.Steps.Count == 0 && plan.Skipped.Count == 0 && SatisfiedCheckCount > 0;
+        ProfileStatusSummary = BuildProfileStatusSummary(plan);
+    }
+
+    /// <summary>
+    /// The per-profile verdict, written so that every outcome reads as a definite answer rather than
+    /// as an absence of one. Selecting a profile always changes this line, which is what makes the
+    /// selector visibly responsive on a PC where no profile has anything left to change.
+    /// </summary>
+    private string BuildProfileStatusSummary(OptimizationPlan plan)
+    {
+        string profile = plan.Profile.Name;
+
+        if (plan.Steps.Count > 0)
+        {
+            string alreadyInPlace = SatisfiedCheckCount > 0
+                ? $" {SatisfiedCheckCount} other check(s) are already in the state this profile wants."
+                : string.Empty;
+
+            return $"{profile}: {plan.Steps.Count} change(s) ready to apply.{alreadyInPlace}";
+        }
+
+        if (plan.Skipped.Count > 0)
+        {
+            return $"{profile}: nothing to apply. This profile deliberately declined {plan.Skipped.Count} " +
+                   $"finding(s) listed below, and the other {SatisfiedCheckCount} check(s) are already in " +
+                   "the state it wants. Another profile may accept the declined ones.";
+        }
+
+        if (SatisfiedCheckCount > 0)
+        {
+            return $"{profile}: fully applied. All {SatisfiedCheckCount} check(s) in this analysis are already " +
+                   "in the state this profile wants, so there is nothing left to change. This is the finished " +
+                   "state, not an error.";
+        }
+
+        return $"{profile}: no checks reached a verdict — see the measurement prompts below.";
     }
 
     /// <summary>
