@@ -74,4 +74,46 @@ public sealed class DpcIsrTraceSessionLiveTests
 
         Assert.True(peakMicroseconds > 0, "Samples arrived but every duration was zero.");
     }
+
+    [Fact]
+    public void RepeatedStartStopCyclesLeaveNoLingeringKernelSession()
+    {
+        // The NT Kernel Logger is a single system-wide session, so a Stop that returns before the
+        // previous one is fully torn down makes the next Start fail. Stop is also now bounded rather
+        // than waiting indefinitely for the processing loop, which is exactly the change that could
+        // break this if the ceiling were too tight.
+        if (Environment.GetEnvironmentVariable("LATENCYBENCH_ETW") != "1")
+        {
+            _output.WriteLine("SKIPPED: set LATENCYBENCH_ETW=1 (and run elevated).");
+            return;
+        }
+
+        Assert.True(ElevationHelper.IsRunningAsAdministrator(), "This test must run elevated.");
+
+        for (int cycle = 1; cycle <= 4; cycle++)
+        {
+            int samples = 0;
+            var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+
+            using (var session = new DpcIsrTraceSession())
+            {
+                session.SampleReceived += _ => Interlocked.Increment(ref samples);
+                session.Start();
+                Assert.True(session.IsRunning, $"cycle {cycle}: session did not start");
+
+                Thread.Sleep(TimeSpan.FromSeconds(2));
+                session.Stop();
+            }
+
+            stopwatch.Stop();
+            _output.WriteLine($"cycle {cycle}: {samples} samples, stop+dispose took {stopwatch.Elapsed.TotalSeconds:0.00}s");
+
+            Assert.True(samples > 0, $"cycle {cycle}: collected nothing, so the session was not really running");
+
+            // If Stop were hitting its 15s ceiling rather than exiting cleanly, this would show it.
+            Assert.True(
+                stopwatch.Elapsed < TimeSpan.FromSeconds(14),
+                $"cycle {cycle}: stop took {stopwatch.Elapsed.TotalSeconds:0.0}s - the processing loop is not exiting promptly");
+        }
+    }
 }

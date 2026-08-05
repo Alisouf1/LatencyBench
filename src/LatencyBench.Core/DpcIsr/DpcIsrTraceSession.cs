@@ -168,6 +168,13 @@ public sealed class DpcIsrTraceSession : IDisposable
         });
     }
 
+    /// <summary>
+    /// How long <see cref="Stop"/> waits for the ETW processing loop to exit before giving up and
+    /// disposing the session regardless. Generous relative to the milliseconds it normally takes,
+    /// but finite because this wait happens on the UI thread.
+    /// </summary>
+    private static readonly TimeSpan ProcessingExitTimeout = TimeSpan.FromSeconds(15);
+
     public void Stop()
     {
         TraceEventSession? session = _session;
@@ -182,7 +189,22 @@ public sealed class DpcIsrTraceSession : IDisposable
         session.Stop();
         try
         {
-            processingTask?.GetAwaiter().GetResult();
+            // Bounded, not indefinite. This runs on the UI thread - DpcIsrViewModel.Stop is called
+            // from the countdown timer and from the Toggle command - so an ETW processing loop that
+            // does not exit would freeze the entire window with no error and no way to recover.
+            // Source.Process is expected to return within milliseconds of Stop; the ceiling exists
+            // for the case where it does not, and giving up is strictly better than hanging.
+            if (processingTask is not null && !processingTask.Wait(ProcessingExitTimeout))
+            {
+                // Deliberately not thrown. The session is disposed in the finally either way, and the
+                // caller's trace has already produced whatever it collected - failing the stop would
+                // discard a valid result over a cleanup detail the user cannot act on. The leaked
+                // task holds only its own ETW buffers and ends when the process does.
+                Diagnostics.DiagnosticLog.Warn(
+                    "DpcIsr",
+                    $"The ETW processing loop did not exit within {ProcessingExitTimeout.TotalSeconds:0}s " +
+                    "of the session being stopped. Disposing the session anyway.");
+            }
         }
         finally
         {
