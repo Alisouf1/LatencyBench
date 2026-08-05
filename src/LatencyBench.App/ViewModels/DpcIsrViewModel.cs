@@ -1,3 +1,4 @@
+using LatencyBench.Core.Diagnostics;
 using System.IO;
 using System.Collections.Concurrent;
 using System.Collections.ObjectModel;
@@ -168,9 +169,12 @@ public sealed partial class DpcIsrViewModel : ObservableObject, IDisposable
 
     private void Start()
     {
+        DiagnosticLog.Info("DpcIsr", $"Start requested. duration={SelectedDuration}s, sessionAlreadyRunning={_session.IsRunning}.");
+
         try
         {
             _session.Start();
+            DiagnosticLog.Info("DpcIsr", "ETW kernel session started successfully.");
             _driverStats.Clear();
             _coreEventCounts.Clear();
             TopDrivers.Clear();
@@ -199,12 +203,21 @@ public sealed partial class DpcIsrViewModel : ObservableObject, IDisposable
         }
         catch (Exception ex)
         {
+            // The whole failure, not just ex.Message: the message alone for an ETW start failure is
+            // routinely something like "Access is denied" with no indication of which of the several
+            // possible causes it was, and this is the exact path a user reports as "trace does nothing".
+            DiagnosticLog.Error("DpcIsr", "ETW kernel session FAILED to start.", ex);
             StatusMessage = ex.Message;
         }
     }
 
     private void Stop()
     {
+        DiagnosticLog.Info(
+            "DpcIsr",
+            $"Stop requested. samples={SampleCount}, dpc={_dpcSampleCount}, isr={_isrSampleCount}, " +
+            $"elapsed={TraceSeconds:0}s.");
+
         _drainTimer.Stop();
         _countdownTimer.Stop();
 
@@ -217,6 +230,24 @@ public sealed partial class DpcIsrViewModel : ObservableObject, IDisposable
 
         IsTracing = false;
         StatusMessage = "Stopped.";
+
+        // A trace that ran but collected nothing is a distinct, silent failure mode from one that
+        // never started: the session opened, the timer ran out, and the user is shown an empty result
+        // with no error. Recorded explicitly so the two cannot be confused in a bug report.
+        if (SampleCount == 0)
+        {
+            DiagnosticLog.Warn(
+                "DpcIsr",
+                "Trace completed but captured ZERO samples. The ETW session started without error yet " +
+                "delivered no DPC/ISR events.");
+        }
+        else
+        {
+            DiagnosticLog.Info(
+                "DpcIsr",
+                $"Trace complete: {SampleCount} sample(s), peak DPC {HighestDpcMicroseconds}us, " +
+                $"peak ISR {HighestIsrMicroseconds}us, {_driverStats.Count} driver(s) resolved.");
+        }
 
         var driverStats = _driverStats
             .Select(kv => new DriverStat(kv.Key, kv.Value.MaxMicroseconds, kv.Value.Count))

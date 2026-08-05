@@ -67,8 +67,33 @@ public sealed class OptimizeViewModelTests
         await vm.AnalyzeCommand.ExecuteAsync(null);
 
         Assert.False(vm.HasPlan);
-        Assert.NotNull(vm.ApplyDisabledReason);
-        Assert.Contains("not an error", vm.ApplyDisabledReason!, StringComparison.OrdinalIgnoreCase);
+
+        // The explanation lives in ProfileStatusSummary, which is now the single verdict for the
+        // selected profile. It used to be duplicated across PlanSummary and ApplyDisabledReason as
+        // well, which stacked three paragraphs saying the same thing; the requirement this test
+        // encodes - that a greyed-out Apply is always explained rather than left bare - is unchanged.
+        Assert.NotNull(vm.ProfileStatusSummary);
+        Assert.Contains("not an error", vm.ProfileStatusSummary!, StringComparison.OrdinalIgnoreCase);
+
+        // And the duplicates really are gone.
+        Assert.Null(vm.PlanSummary);
+    }
+
+    [Fact]
+    public async Task AnAlreadyTunedPcShowsExactlyOneExplanationNotThree()
+    {
+        // The regression this pins: PlanSummary, ApplyDisabledReason and ProfileStatusSummary were
+        // all populated for an empty plan, rendering three stacked paragraphs that each said "there
+        // is nothing to change" in slightly different words.
+        var vm = Create(Report(notApplicable: new[]
+        {
+            new RuleOutcome.NotApplicable("rec.a", "Check A", "Already configured."),
+        }));
+
+        await vm.AnalyzeCommand.ExecuteAsync(null);
+
+        string?[] shown = { vm.ProfileStatusSummary, vm.PlanSummary, vm.ApplyDisabledReason };
+        Assert.Single(shown.Where(text => !string.IsNullOrWhiteSpace(text)));
     }
 
     [Fact]

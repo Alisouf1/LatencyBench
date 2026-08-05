@@ -36,8 +36,14 @@
                     <!-- A ListBox rather than hand-rolled RadioButtons: selection is already two-way
                          bindable, keyboard navigation comes for free, and there is no converter
                          needed to work out which item is the selected one. -->
+                    <!-- HorizontalScrollBarVisibility=Disabled is what actually makes the descriptions
+                         wrap. Without it the ListBox gives each item its full desired width, the
+                         TextWrapping below never takes effect, and every profile description is
+                         truncated mid-sentence behind a horizontal scrollbar - so the one piece of
+                         text explaining what each profile does was unreadable. -->
                     <ListBox ItemsSource="{Binding Profiles}" SelectedItem="{Binding SelectedProfile}"
-                             Background="Transparent" BorderThickness="0" HorizontalContentAlignment="Stretch">
+                             Background="Transparent" BorderThickness="0" HorizontalContentAlignment="Stretch"
+                             ScrollViewer.HorizontalScrollBarVisibility="Disabled">
                         <ListBox.ItemTemplate>
                             <DataTemplate DataType="{x:Type vm:ProfileOptionViewModel}">
                                 <StackPanel Margin="2,4,2,6">

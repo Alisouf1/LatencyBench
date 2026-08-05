@@ -126,10 +126,21 @@ if (-not $SkipBuild) {
     Assert-True ($LASTEXITCODE -eq 0) "dotnet publish succeeded"
 }
 
-$publishedFiles = Get-ChildItem $publishDir -File
 Assert-True (Test-Path (Join-Path $publishDir $exeName)) "Published exe exists"
-Assert-True (($publishedFiles | Where-Object { $_.Extension -ne ".pdb" }).Count -eq 1) `
-    "Publish output is genuinely single-file (excluding .pdb symbols)"
+
+# Was "the publish output is exactly one file". Single-file publishing had to be abandoned because
+# it broke DPC/ISR tracing: TraceEvent locates KernelTraceControl.dll from its own assembly's
+# location, which single-file publishing defines as an empty string, so every trace failed with
+# Win32Exception 126. What must be asserted now is the opposite - that those native DLLs really are
+# on disk next to the exe, because their absence is precisely the packaging mistake that broke it.
+Assert-True (Test-Path (Join-Path $publishDir "amd64\KernelTraceControl.dll")) `
+    "TraceEvent's native KernelTraceControl.dll ships next to the exe (required for DPC/ISR tracing)"
+Assert-True (Test-Path (Join-Path $publishDir "amd64\msdia140.dll")) `
+    "TraceEvent's native msdia140.dll ships next to the exe"
+
+# Self-contained still has to hold, or the app needs .NET preinstalled on the target machine.
+Assert-True (Test-Path (Join-Path $publishDir "System.Private.CoreLib.dll")) `
+    "Publish output is self-contained (the .NET runtime is included)"
 
 Step "Compiling installer (default version)"
 & $iscc $issPath | Out-Null

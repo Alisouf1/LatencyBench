@@ -22,23 +22,30 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <UseWPF>true</UseWPF>
     <ApplicationManifest>app.manifest</ApplicationManifest>
-    <!-- Release requirement: a self-contained single-file publish. These four apply only to
-         `dotnet publish` (a plain `dotnet build` ignores RuntimeIdentifier/PublishSingleFile and
-         still produces the normal multi-DLL framework-dependent debug output), so day-to-day
-         building and debugging is unaffected.
-         - SelfContained: bundles the .NET runtime, so the target machine needs nothing preinstalled.
-         - RuntimeIdentifier: required for both SelfContained and PublishSingleFile; win-x64 matches
-           PlatformTarget above and installer/LatencyBench.iss's PublishDir.
-         - PublishSingleFile: collapses the normal ~270-file framework-dependent output into one exe.
-         - IncludeNativeLibrariesForSelfExtract: without this, the native DLLs TraceEvent needs for
-           ETW tracing (KernelTraceControl.dll etc.) are left sitting next to the exe rather than
-           bundled into it, which would silently defeat "single file". With it, they are embedded
-           and self-extracted to a per-version cache folder under the temp directory at first run —
-           normal, documented single-file behaviour, not a packaging defect. -->
+    <!-- Self-contained publish: bundles the .NET runtime, so the target machine needs nothing
+         preinstalled. Applies only to `dotnet publish` (a plain `dotnet build` ignores
+         RuntimeIdentifier), so day-to-day building and debugging is unaffected. RuntimeIdentifier is
+         required by SelfContained and matches PlatformTarget above and LatencyBench.iss's PublishDir.
+
+         PublishSingleFile is deliberately OFF, and must stay off. It was enabled here for packaging
+         tidiness and it silently broke DPC/ISR tracing outright — the single most important feature
+         in the app. TraceEvent loads KernelTraceControl.dll by building a path from its own
+         assembly's location, and under single-file publishing Assembly.Location is an empty string
+         by design, so the lookup resolves to a nonexistent root path. The failure is not a missing
+         file — with IncludeNativeLibrariesForSelfExtract the DLL is extracted to the temp cache
+         perfectly well — it is that TraceEvent cannot be told where the extracted copy went. It
+         surfaces as Win32Exception 126 ("The specified module could not be found") from
+         ETWKernelControl.LoadKernelTraceControl(), and nothing about it is visible at build time:
+         it compiles cleanly, the app starts, every other tab works, and only the trace fails.
+
+         Verified by running the real published build both ways: single-file -> error 126 on every
+         trace attempt; multi-file -> the ETW kernel session starts and collects samples. The native
+         DLLs (amd64/x86/arm64 KernelTraceControl.dll and msdia140.dll) ship as real files next to
+         the exe, which is exactly what TraceEvent's loader expects. The installer already packages
+         the whole publish folder recursively, so this costs nothing at install time. -->
     <SelfContained>true</SelfContained>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
-    <PublishSingleFile>true</PublishSingleFile>
-    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+    <PublishSingleFile>false</PublishSingleFile>
     <!-- Deliberately NOT PublishTrimmed: WPF resolves a great deal through reflection (XAML markup
          compilation, DataTemplate/converter lookup by StaticResource key, MVVM source-generated
          property change handlers), and the trimmer cannot always prove those paths reachable. An

@@ -323,10 +323,17 @@ public sealed partial class OptimizeViewModel : ObservableObject
         }
 
         HasPlan = plan.Steps.Count > 0;
-        PlanSummary = BuildPlanSummary(plan);
-        ApplyDisabledReason = BuildApplyDisabledReason(plan);
         IsFullyOptimizedForProfile = plan.Steps.Count == 0 && plan.Skipped.Count == 0 && SatisfiedCheckCount > 0;
         ProfileStatusSummary = BuildProfileStatusSummary(plan);
+
+        // ProfileStatusSummary is the single verdict for the selected profile. These two exist only
+        // to add detail it does not already carry: the plan's technical shape when there IS a plan,
+        // and the reason Apply is unavailable when that is not already obvious from the verdict.
+        // Populating all three unconditionally stacked three paragraphs that said the same thing in
+        // three different ways on an already-tuned PC, which reads as the page repeating itself
+        // rather than as an answer.
+        PlanSummary = plan.Steps.Count > 0 ? BuildPlanSummary(plan) : null;
+        ApplyDisabledReason = plan.Steps.Count > 0 ? null : BuildMeasurementHint();
 
         DiagnosticLog.Info(
             "Optimize",
@@ -381,34 +388,16 @@ public sealed partial class OptimizeViewModel : ObservableObject
     }
 
     /// <summary>
-    /// Null when Apply is available. Otherwise says plainly why it is not, distinguishing the three
-    /// materially different reasons a plan can be empty — everything is already applied, this profile
-    /// declined everything that was found, or some checks never reached a verdict because a
-    /// measurement is missing. Without this the button is simply grey, which is indistinguishable
-    /// from the page being broken.
+    /// The one thing the per-profile verdict cannot say for itself: that running a specific test
+    /// might turn an undecided check into a real recommendation. Null when nothing is waiting on a
+    /// measurement, so an already-complete PC shows a single clean verdict rather than a paragraph
+    /// qualifying it.
     /// </summary>
-    private string? BuildApplyDisabledReason(OptimizationPlan plan)
-    {
-        if (plan.Steps.Count > 0)
-        {
-            return null;
-        }
-
-        string measurementNote = MeasurementPromptCount > 0
-            ? $" {MeasurementPromptCount} check(s) below could not reach a verdict without a measurement — " +
-              "running the test each one names may surface more to do."
-            : string.Empty;
-
-        if (plan.Skipped.Count > 0)
-        {
-            return $"Nothing to apply: the {plan.Profile.Name} profile declined all {plan.Skipped.Count} " +
-                   "finding(s) — see \"Not included by this profile\" below. Switching profile may accept " +
-                   $"some of them.{measurementNote}";
-        }
-
-        return "Nothing to apply — every check either passed or is already configured the way the " +
-               $"analysis would set it. This is a healthy result, not an error.{measurementNote}";
-    }
+    private string? BuildMeasurementHint() =>
+        MeasurementPromptCount == 0
+            ? null
+            : $"{MeasurementPromptCount} check(s) below could not reach a verdict without a measurement — " +
+              "running the test each one names may surface more to do.";
 
     private static string BuildPlanSummary(OptimizationPlan plan)
     {
