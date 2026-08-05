@@ -22,6 +22,29 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <UseWPF>true</UseWPF>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <!-- Release requirement: a self-contained single-file publish. These four apply only to
+         `dotnet publish` (a plain `dotnet build` ignores RuntimeIdentifier/PublishSingleFile and
+         still produces the normal multi-DLL framework-dependent debug output), so day-to-day
+         building and debugging is unaffected.
+         - SelfContained: bundles the .NET runtime, so the target machine needs nothing preinstalled.
+         - RuntimeIdentifier: required for both SelfContained and PublishSingleFile; win-x64 matches
+           PlatformTarget above and installer/LatencyBench.iss's PublishDir.
+         - PublishSingleFile: collapses the normal ~270-file framework-dependent output into one exe.
+         - IncludeNativeLibrariesForSelfExtract: without this, the native DLLs TraceEvent needs for
+           ETW tracing (KernelTraceControl.dll etc.) are left sitting next to the exe rather than
+           bundled into it, which would silently defeat "single file". With it, they are embedded
+           and self-extracted to a per-version cache folder under the temp directory at first run —
+           normal, documented single-file behaviour, not a packaging defect. -->
+    <SelfContained>true</SelfContained>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <PublishSingleFile>true</PublishSingleFile>
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+    <!-- Deliberately NOT PublishTrimmed: WPF resolves a great deal through reflection (XAML markup
+         compilation, DataTemplate/converter lookup by StaticResource key, MVVM source-generated
+         property change handlers), and the trimmer cannot always prove those paths reachable. An
+         untested trim pass risks removing something a specific tab needs only at runtime — exactly
+         the class of bug that would not show up in a build, only when a user opens that tab. -->
+    <PublishTrimmed>false</PublishTrimmed>
     <!-- Compiled into the executable's Win32 resources, which is what Explorer, the taskbar, the
          Start menu, Alt+Tab and any shortcut pointing at the exe all read. -->
     <ApplicationIcon>Assets\LatencyBench.ico</ApplicationIcon>

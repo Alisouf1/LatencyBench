@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Diagnostics;
 using System.Threading.Tasks;
 
@@ -46,8 +47,12 @@ public sealed class ProcessCpuMonitor
                     TimeSpan totalProcessorTime = process.TotalProcessorTime;
                     dictionary[process.ProcessName] = (dictionary.TryGetValue(process.ProcessName, out var value) ? (value + totalProcessorTime) : totalProcessorTime);
                 }
-                catch
+                catch (Exception ex) when (ex is InvalidOperationException or Win32Exception)
                 {
+                    // The process exited between GetProcesses() and this read (InvalidOperationException),
+                    // or it's a protected/elevated process this one can't query (Win32Exception - "Access is
+                    // denied"). Either way it's one process missing from one snapshot, not worth failing the
+                    // whole sample over - same reasoning as the identical catch in ProcessTuner.Describe().
                 }
             }
         }
