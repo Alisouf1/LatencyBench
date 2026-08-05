@@ -111,14 +111,48 @@ public sealed class PowerCfgRunner
 
     /// <summary>Windows 11 hides the High performance plan on many OEM and modern-standby systems.
     /// Checking before activating turns a silent no-op into an explicit, explainable failure.</summary>
+    /// <summary>
+    /// Rejects anything that is not a GUID before it is used to build a registry path or passed to
+    /// powercfg.
+    ///
+    /// <para>
+    /// These values are not all constants. PowerCfgAcValueTweak.Revert reads the scheme GUID back out
+    /// of tweak-backups.json - a plain file under %LocalAppData% that any process running as the user
+    /// can edit - and hands it straight to SetAcValueIndex, which interpolates it into an HKLM path.
+    /// Corruption is the likelier cause than malice, but either way an unvalidated value reaches a
+    /// privileged operation. Parsing as a GUID is a complete whitelist for this input: nothing that
+    /// parses can contain a separator, a wildcard, or anything else with meaning to the registry.
+    /// </para>
+    ///
+    /// <para>
+    /// The original string is used rather than the parsed value's round-trip, because power scheme
+    /// keys are stored in the registry in the exact casing and bracket style Windows wrote them, and
+    /// reformatting would risk missing a key that exists.
+    /// </para>
+    /// </summary>
+    private static void ValidateGuid(string? value, string parameterName)
+    {
+        if (!Guid.TryParse(value, out _))
+        {
+            throw new ArgumentException(
+                $"'{value ?? "(null)"}' is not a valid power GUID. The saved power settings may be " +
+                "corrupt; reverting this tweak from the Tweaks tab will clear them.",
+                parameterName);
+        }
+    }
+
     public bool SchemeExists(string schemeGuid)
     {
+        ValidateGuid(schemeGuid, nameof(schemeGuid));
+
         using RegistryKey? scheme = Registry.LocalMachine.OpenSubKey($@"{PowerSchemesKey}\{schemeGuid}");
         return scheme is not null;
     }
 
     public void SetActiveScheme(string schemeGuid)
     {
+        ValidateGuid(schemeGuid, nameof(schemeGuid));
+
         var (exitCode, _, stdErr) = Run("/setactive", schemeGuid);
         if (exitCode != 0)
         {
@@ -129,6 +163,10 @@ public sealed class PowerCfgRunner
 
     public void SetAcValueIndex(string schemeGuid, string subgroupGuid, string settingGuid, uint value)
     {
+        ValidateGuid(schemeGuid, nameof(schemeGuid));
+        ValidateGuid(subgroupGuid, nameof(subgroupGuid));
+        ValidateGuid(settingGuid, nameof(settingGuid));
+
         var (exitCode, _, stdErr) = Run("/setacvalueindex", schemeGuid, subgroupGuid, settingGuid, value.ToString());
         if (exitCode != 0)
         {
@@ -154,6 +192,10 @@ public sealed class PowerCfgRunner
     /// </summary>
     public uint? QueryAcValueIndex(string schemeGuid, string subgroupGuid, string settingGuid)
     {
+        ValidateGuid(schemeGuid, nameof(schemeGuid));
+        ValidateGuid(subgroupGuid, nameof(subgroupGuid));
+        ValidateGuid(settingGuid, nameof(settingGuid));
+
         using (RegistryKey? overrideKey = Registry.LocalMachine.OpenSubKey(
             $@"{PowerSchemesKey}\{schemeGuid}\{subgroupGuid}\{settingGuid}"))
         {
