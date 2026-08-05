@@ -140,6 +140,25 @@ $builtInstaller = Get-ChildItem $outputDir -Filter "LatencyBench-Setup-*.exe" |
     Sort-Object LastWriteTime -Descending | Select-Object -First 1
 Assert-True ($null -ne $builtInstaller) "Installer artifact produced"
 
+# --- Rollback after a forced install failure -------------------------------------------------
+#
+# Blocks the exe's own destination path with a same-named directory before running Setup, so the
+# single [Files] copy fails deterministically instead of relying on something flaky like disk
+# space. /SUPPRESSMSGBOXES answers the resulting Abort-Retry-Ignore box with Abort, per Inno's
+# documented silent-mode behavior, so Setup exits non-zero rather than hanging on a dialog nobody
+# is there to click. This never gets past the copy step, so there is nothing partial to roll back
+# from - the real thing being verified is that a failed attempt leaves no Apps & Features entry
+# and does not prevent a normal install from working right afterward (checked by the next step).
+
+Step "Rollback after a forced install failure"
+New-Item -ItemType Directory -Force -Path $installDir | Out-Null
+New-Item -ItemType Directory -Force -Path (Join-Path $installDir $exeName) | Out-Null
+$failedInstall = Start-Process -FilePath $builtInstaller.FullName -ArgumentList "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART" -PassThru -Wait
+Assert-True ($failedInstall.ExitCode -ne 0) "Setup reports failure when the target path cannot be written"
+Assert-True (-not (Get-ItemProperty $uninstallRegPath -ErrorAction SilentlyContinue)) "No Apps & Features entry from the failed attempt"
+Remove-Item $installDir -Recurse -Force -ErrorAction SilentlyContinue
+Assert-True (-not (Test-Path $installDir)) "Blocked path cleaned up before retrying"
+
 # --- First install ------------------------------------------------------------------------
 
 Step "First install (silent)"
