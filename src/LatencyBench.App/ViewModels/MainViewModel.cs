@@ -77,6 +77,7 @@ public sealed partial class MainViewModel : ObservableObject
         var restartService = new DeviceRestartService();
         var interruptDeviceService = new InterruptDeviceService();
         var affinityService = new InterruptAffinityService(treeEnumerator);
+        _affinityService = affinityService;
         var traceHistory = new DpcIsrHistoryStore();
 
         MsiMode = new MsiModeViewModel(interruptDeviceService, restartService, new InterruptDeviceEnumerator(), treeEnumerator);
@@ -112,11 +113,23 @@ public sealed partial class MainViewModel : ObservableObject
     /// <summary>Release OS-level resources on window close. Critical for DPC/ISR: its ETW session is
     /// the single system-wide NT Kernel Logger, which would otherwise dangle until reboot (and block
     /// LatencyMon and other tools) if the app is closed mid-trace.</summary>
+    /// <summary>Held so it can be disposed on shutdown. It owns an open HKLM registry key for the
+    /// device-enum root, shared by the Affinity, MSI and Optimize tabs, and was previously only a
+    /// constructor local - so nothing ever released it.</summary>
+    private readonly InterruptAffinityService _affinityService;
+
     public void Shutdown()
     {
         Affinity.SetActive(false);
         DpcIsr.Dispose();
         Monitor.Shutdown();
+
+        // Both own OS resources that outlive managed collection: an open registry key, and the
+        // cancellation source plus worker threads behind the CPU load generator. Process exit would
+        // reclaim them, but relying on that is not deterministic cleanup, and it hides a real leak if
+        // either is ever used somewhere longer-lived than the main window.
+        PortTest.Dispose();
+        _affinityService.Dispose();
     }
 
     public void SetWindowHandle(IntPtr handle)

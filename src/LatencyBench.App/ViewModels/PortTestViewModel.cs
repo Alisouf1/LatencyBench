@@ -14,7 +14,7 @@ using LatencyBench.Core.UsbTree;
 
 namespace LatencyBench.App.ViewModels;
 
-public sealed partial class PortTestViewModel : ObservableObject
+public sealed partial class PortTestViewModel : ObservableObject, IDisposable
 {
     /// <summary>Public so "Run full diagnostic" can match the DPC/ISR trace it runs alongside to this same length — mismatched durations meant the trace kept running silently after the port test's own progress UI had already shown "complete", reading as if nothing but the port test had happened.</summary>
     public const int TestDurationSeconds = 6;
@@ -408,4 +408,12 @@ public sealed partial class PortTestViewModel : ObservableObject
 
         AdvisorMessage = AdvisorMessageGenerator.Generate(groups.Select(g => g.Best).ToList());
     }
+
+    /// <summary>
+    /// Releases the CPU load generator, which owns a cancellation source and the worker threads it
+    /// spins up for load-testing. Stop() is called at the end of each test, but Dispose never was, so
+    /// the generator's own resources were left to process exit rather than released deterministically.
+    /// Called from MainViewModel.Shutdown alongside the other OS-resource owners.
+    /// </summary>
+    public void Dispose() => _loadGenerator.Dispose();
 }
