@@ -78,7 +78,17 @@ public sealed class PowerCfgRunner
 
         // WaitForExit(int) does not wait for the async readers to drain the redirected streams, so
         // join them explicitly before reading their results.
-        Task.WaitAll(new Task[] { stdOutTask, stdErrTask }, ProcessTimeout);
+        //
+        // The result of WaitAll must be checked. Discarding it meant Task.Result was reached on a
+        // possibly-incomplete task, and Result blocks with no timeout - an unbounded wait on the very
+        // path the timeout above exists to bound. powercfg exiting does not guarantee its pipes are
+        // closed if something it spawned inherited them.
+        if (!Task.WaitAll(new Task[] { stdOutTask, stdErrTask }, ProcessTimeout))
+        {
+            throw new TimeoutException(
+                $"powercfg.exe exited, but its output streams were still open after " +
+                $"{ProcessTimeout.TotalSeconds:0} seconds.");
+        }
 
         return (ExitCode: process.ExitCode, StdOut: stdOutTask.Result, StdErr: stdErrTask.Result);
     }

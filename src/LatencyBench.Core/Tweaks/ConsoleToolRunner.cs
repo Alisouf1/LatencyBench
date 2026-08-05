@@ -62,7 +62,19 @@ public static class ConsoleToolRunner
         }
 
         // WaitForExit(int) does not guarantee the redirected streams have been drained.
-        Task.WaitAll(new Task[] { stdOut, stdErr }, timeout);
+        //
+        // The return value of WaitAll must be acted on. It was previously discarded, and Task.Result
+        // on a task that has not completed blocks with no timeout - so a reader that never finished
+        // hung here permanently, reintroducing at the last line exactly the unbounded wait this class
+        // exists to prevent. The child exiting does not guarantee the pipe is closed: a grandchild
+        // that inherited the handle keeps it open, and ReadToEndAsync then never completes.
+        if (!Task.WaitAll(new Task[] { stdOut, stdErr }, timeout))
+        {
+            throw new TimeoutException(
+                $"{fileName} exited, but its output streams were still open after " +
+                $"{timeout.TotalSeconds:0} seconds. A child process it started is most likely still " +
+                "holding them.");
+        }
 
         return (process.ExitCode, stdOut.Result, stdErr.Result);
     }
