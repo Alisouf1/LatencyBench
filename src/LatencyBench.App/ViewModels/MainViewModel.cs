@@ -1,5 +1,6 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using LatencyBench.Core.Diagnostics;
 using LatencyBench.Core.Advisor;
 using LatencyBench.Core.Affinity;
 using LatencyBench.Core.DpcIsr;
@@ -223,6 +224,11 @@ public sealed partial class MainViewModel : ObservableObject
 
     partial void OnCurrentSectionChanged(NavSection value)
     {
+        // Records that a tab click actually reached the view model. "The tab highlights but the
+        // content does not change" is indistinguishable, from the outside, between the click never
+        // arriving here and the view failing to render once it did - this line separates the two.
+        DiagnosticLog.Info("Navigation", $"Section changed to {value}.");
+
         CurrentViewModel = value switch
         {
             NavSection.Dashboard => Dashboard,

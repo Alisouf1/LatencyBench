@@ -4,10 +4,12 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using LatencyBench.Core.Affinity;
+using LatencyBench.Core.Models;
 using LatencyBench.Core.Msi;
 using LatencyBench.Core.Profiles.Models;
 using LatencyBench.Core.Recommendations.Models;
 using LatencyBench.Core.Tweaks;
+using LatencyBench.Core.Tweaks.Models;
 
 namespace LatencyBench.Core.Profiles;
 
@@ -93,9 +95,9 @@ public sealed class OptimizationRunner
 
             try
             {
-                Execute(step, tweaks);
+                string? verificationNote = Execute(step, tweaks);
                 appliedSteps.Add(step);
-                results.Add(new StepResult(step, StepOutcome.Applied));
+                results.Add(new StepResult(step, StepOutcome.Applied, verificationNote));
             }
             catch (Exception ex)
             {
@@ -123,7 +125,19 @@ public sealed class OptimizationRunner
         };
     }
 
-    private void Execute(PlanStep step, IReadOnlyDictionary<string, ITweak> tweaks)
+    /// <summary>
+    /// Performs the step's real system change and returns an optional note about how thoroughly the
+    /// result could be confirmed, or null when it was verified cleanly.
+    /// <para>
+    /// A step used to count as applied purely because nothing threw. That is not the same thing as
+    /// the setting having changed: a registry write can succeed while Group Policy, a vendor service,
+    /// or a driver immediately overrides the value, and the user would be told the optimisation was
+    /// applied while the machine was unchanged. Every tweak already knows how to read its own current
+    /// state, so the result is now read back and a write that did not stick is reported as a failure
+    /// rather than a success.
+    /// </para>
+    /// </summary>
+    private string? Execute(PlanStep step, IReadOnlyDictionary<string, ITweak> tweaks)
     {
         switch (step.Recommendation.Action)
         {
@@ -135,7 +149,7 @@ public sealed class OptimizationRunner
                 }
 
                 tweak.Apply();
-                break;
+                return VerifyApplied(tweak);
 
             case RecommendedAction.SetInterruptAffinity affinity:
                 if (_affinityService is null)
@@ -145,7 +159,15 @@ public sealed class OptimizationRunner
                 }
 
                 _affinityService.SetSpecifiedCores(affinity.InstanceId, affinity.Cores);
-                break;
+
+                // Read the policy straight back off the device rather than trusting the write. The
+                // registry accepts these values even when the device will not honour them, so this is
+                // the only way to tell "set" apart from "set and kept".
+                HostControllerInfo written = _affinityService.ReadPolicy(affinity.InstanceId, step.Title);
+                return written.Policy == InterruptAffinityPolicy.SpecifiedProcessors
+                    ? null
+                    : "The affinity policy did not read back as expected after being written; the device " +
+                      "may be overriding it. Restart the device and re-check the Affinity tab.";
 
             case RecommendedAction.EnableMsiMode msi:
                 if (_interruptDeviceService is null)
@@ -154,7 +176,11 @@ public sealed class OptimizationRunner
                 }
 
                 _interruptDeviceService.SetMsiMode(msi.InstanceId, enabled: true);
-                break;
+
+                // MSI only actually takes effect once the device restarts, so there is deliberately no
+                // read-back assertion here — the plan already marks this phase as DeviceRestart and the
+                // result summary tells the user to restart the device.
+                return null;
 
             case RecommendedAction.ManualOnly:
                 // The planner already refuses these, so reaching here means a caller built a plan by
@@ -165,6 +191,32 @@ public sealed class OptimizationRunner
             default:
                 throw new InvalidOperationException($"Unsupported action for '{step.Title}'.");
         }
+    }
+
+    /// <summary>
+    /// Confirms a tweak actually took, by reading its state back immediately after applying it.
+    /// Returns null when it verified cleanly, or a note when the state could not be read. Throws when
+    /// the tweak reports it is still not applied, so the step is recorded as a failure — and therefore
+    /// rolled back — rather than being presented to the user as a change that happened.
+    /// </summary>
+    private static string? VerifyApplied(ITweak tweak)
+    {
+        TweakState state = tweak.GetState();
+
+        return state switch
+        {
+            TweakState.Applied => null,
+
+            TweakState.NotApplied => throw new InvalidOperationException(
+                $"'{tweak.Definition.Name}' was written without error but still reads as not applied. " +
+                "Something is overriding it — most often Group Policy, a vendor utility, or a driver " +
+                "that rewrites the value. The change has not taken effect."),
+
+            // Unknown means the current value could not be read, not that the write failed. Failing the
+            // step here would roll back a change that may well be fine, so it is reported instead.
+            _ => $"'{tweak.Definition.Name}' was applied, but its current state could not be read back, " +
+                 "so it could not be confirmed. Check the Tweaks tab to see how it now reads.",
+        };
     }
 
     /// <summary>

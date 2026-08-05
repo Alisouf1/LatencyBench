@@ -1,5 +1,6 @@
 using System.IO;
 using System.Threading;
+using LatencyBench.Core.Diagnostics;
 using System.Windows;
 using System.Windows.Interop;
 using System.Windows.Media;
@@ -51,6 +52,12 @@ public partial class App : Application
             return;
         }
 
+        DiagnosticLog.Info(
+            "App",
+            $"Startup. Version {typeof(App).Assembly.GetName().Version}, " +
+            $"elevated={LatencyBench.Core.Elevation.ElevationHelper.IsRunningAsAdministrator()}, " +
+            $"OS={Environment.OSVersion.VersionString}, cores={Environment.ProcessorCount}.");
+
         DispatcherUnhandledException += OnDispatcherUnhandledException;
 
         // Covers what DispatcherUnhandledException cannot: an exception on a thread pool thread
@@ -70,6 +77,8 @@ public partial class App : Application
 
     protected override void OnExit(ExitEventArgs e)
     {
+        DiagnosticLog.Info("App", $"Shutdown, exit code {e.ApplicationExitCode}.");
+
         if (_ownsSingleInstanceMutex)
         {
             try

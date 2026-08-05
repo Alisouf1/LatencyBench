@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using System.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using LatencyBench.Core.Diagnostics;
 using LatencyBench.Core.Affinity;
 using LatencyBench.Core.Benchmarking;
 using LatencyBench.Core.Benchmarking.Models;
@@ -170,20 +171,34 @@ public sealed partial class OptimizeViewModel : ObservableObject
     {
         if (_loaded)
         {
+            DiagnosticLog.Info("Optimize", "LoadIfNeeded: already loaded, skipping analysis.");
             return;
         }
 
         _loaded = true;
+        DiagnosticLog.Info("Optimize", "LoadIfNeeded: first visit, starting analysis.");
         AnalyzeCommand.Execute(null);
     }
 
     partial void OnSelectedProfileChanged(ProfileOptionViewModel? value)
     {
+        DiagnosticLog.Info(
+            "Optimize",
+            $"Profile selected: {value?.Name ?? "(none)"}. Report available: {_report is not null}.");
+
         // Re-planning from the cached report is instant, so switching profiles shows its effect
         // immediately rather than needing another analysis pass.
         if (_report is not null)
         {
             BuildPlan();
+        }
+        else
+        {
+            // Worth recording rather than silently doing nothing: this is what "switching profiles
+            // does nothing" looks like from the inside when the analysis never ran.
+            DiagnosticLog.Warn(
+                "Optimize",
+                "Profile changed but no analysis report exists yet, so no plan was built.");
         }
     }
 
@@ -251,6 +266,17 @@ public sealed partial class OptimizeViewModel : ObservableObject
                 NonFindings.Add(new NonFindingViewModel(outcome.Title, outcome.MissingInformation, needsMeasurement: true));
             }
 
+            DiagnosticLog.Info(
+                "Optimize",
+                $"Analysis complete: {_report.Recommendations.Count} actionable, " +
+                $"{_report.NotApplicable.Count} already satisfied, {_report.Undetermined.Count} undetermined, " +
+                $"{_report.Failures.Count} rule failure(s).");
+
+            foreach (string failure in _report.Failures)
+            {
+                DiagnosticLog.Warn("Optimize", $"Rule failure: {failure}");
+            }
+
             BuildPlan();
 
             Status = _report.Failures.Count > 0
@@ -259,6 +285,7 @@ public sealed partial class OptimizeViewModel : ObservableObject
         }
         catch (Exception ex)
         {
+            DiagnosticLog.Error("Optimize", "Analysis threw.", ex);
             Status = $"Analysis failed: {ex.Message}";
         }
     }
@@ -300,6 +327,22 @@ public sealed partial class OptimizeViewModel : ObservableObject
         ApplyDisabledReason = BuildApplyDisabledReason(plan);
         IsFullyOptimizedForProfile = plan.Steps.Count == 0 && plan.Skipped.Count == 0 && SatisfiedCheckCount > 0;
         ProfileStatusSummary = BuildProfileStatusSummary(plan);
+
+        DiagnosticLog.Info(
+            "Optimize",
+            $"Plan built for '{plan.Profile.Name}': {plan.Steps.Count} step(s), {plan.Skipped.Count} skipped, " +
+            $"{SatisfiedCheckCount} already satisfied, {MeasurementPromptCount} awaiting measurement. " +
+            $"Apply enabled: {HasPlan}.");
+
+        foreach (PlanStep step in plan.Steps)
+        {
+            DiagnosticLog.Info("Optimize", $"  plan step: {step.Recommendation.Id} ({step.Phase})");
+        }
+
+        foreach (SkippedRecommendation skipped in plan.Skipped)
+        {
+            DiagnosticLog.Info("Optimize", $"  skipped: {skipped.Recommendation.Id} - {skipped.Reason}");
+        }
     }
 
     /// <summary>
@@ -401,6 +444,12 @@ public sealed partial class OptimizeViewModel : ObservableObject
     {
         if (IsBusy || SelectedProfile is not { } profile || _report is null)
         {
+            // Apply doing nothing at all is one of the reported symptoms, so each reason it can decline
+            // to run is recorded rather than being an invisible early return.
+            DiagnosticLog.Warn(
+                "Optimize",
+                $"Apply declined: busy={IsBusy}, profileSelected={SelectedProfile is not null}, " +
+                $"reportAvailable={_report is not null}.");
             return;
         }
 
@@ -408,9 +457,17 @@ public sealed partial class OptimizeViewModel : ObservableObject
         var chosen = Steps.Where(step => !AdvancedMode || step.IsSelected).ToList();
         if (chosen.Count == 0)
         {
+            DiagnosticLog.Warn(
+                "Optimize",
+                $"Apply declined: no steps chosen (plan has {Steps.Count}, advancedMode={AdvancedMode}).");
             Status = "Nothing selected to apply.";
             return;
         }
+
+        DiagnosticLog.Info(
+            "Optimize",
+            $"Apply starting: profile='{profile.Name}', {chosen.Count} step(s), " +
+            $"restorePoint={CreateRestorePoint}, measure={MeasureBeforeAfter}.");
 
         IsBusy = true;
         try
@@ -461,7 +518,20 @@ public sealed partial class OptimizeViewModel : ObservableObject
             foreach (StepResult stepResult in result.Results)
             {
                 Results.Add(new StepResultViewModel(stepResult));
+
+                // The record of what actually happened to the machine, per step, including the
+                // post-apply verification note when a change could not be confirmed.
+                string detail = string.IsNullOrWhiteSpace(stepResult.Message) ? string.Empty : $" - {stepResult.Message}";
+                DiagnosticLog.Info(
+                    "Optimize",
+                    $"  step result: {stepResult.Step.Recommendation.Id} => {stepResult.Outcome}{detail}");
             }
+
+            DiagnosticLog.Info(
+                "Optimize",
+                $"Apply finished: succeeded={result.Succeeded}, applied={result.Applied.Count}, " +
+                $"failed={result.Failures.Count}, rolledBack={result.RolledBack}, " +
+                $"restorePoint={result.RestorePointCreated} ({result.RestorePointMessage}).");
 
             // A benchmark is only meaningful when something was actually applied and kept — comparing
             // "before" against "after a rollback" would just measure the machine being unchanged and
@@ -495,6 +565,7 @@ public sealed partial class OptimizeViewModel : ObservableObject
         }
         catch (Exception ex)
         {
+            DiagnosticLog.Error("Optimize", "Apply threw.", ex);
             Status = $"Apply failed: {ex.Message}";
         }
     }

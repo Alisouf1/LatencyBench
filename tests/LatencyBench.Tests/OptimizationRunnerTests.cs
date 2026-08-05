@@ -118,6 +118,109 @@ public class OptimizationRunnerTests
         CreatedAt = DateTimeOffset.UtcNow
     };
 
+    /// <summary>
+    /// Accepts Apply() without error but never actually changes state — the shape of a real tweak
+    /// whose registry write succeeds while Group Policy, a vendor utility, or a driver immediately
+    /// overrides the value back.
+    /// </summary>
+    private sealed class SilentlyIneffectiveTweak : ITweak
+    {
+        public SilentlyIneffectiveTweak(string id) => Definition = new TweakDefinition
+        {
+            Id = id,
+            Category = TweakCategory.Power,
+            Name = id,
+            Description = id
+        };
+
+        public TweakDefinition Definition { get; }
+
+        public TweakState GetState() => TweakState.NotApplied;
+
+        public void Apply()
+        {
+            // Deliberately does nothing: no exception, no change.
+        }
+
+        public void Revert()
+        {
+        }
+    }
+
+    /// <summary>Applies fine but cannot report its own state afterwards.</summary>
+    private sealed class UnreadableTweak : ITweak
+    {
+        public UnreadableTweak(string id) => Definition = new TweakDefinition
+        {
+            Id = id,
+            Category = TweakCategory.Power,
+            Name = id,
+            Description = id
+        };
+
+        public TweakDefinition Definition { get; }
+
+        public TweakState GetState() => TweakState.Unknown;
+
+        public void Apply()
+        {
+        }
+
+        public void Revert()
+        {
+        }
+    }
+
+    [Fact]
+    public async Task ATweakThatSilentlyDoesNotTakeEffectIsReportedAsFailedNotApplied()
+    {
+        // The regression: a step counted as applied purely because Apply() did not throw, so a write
+        // that something else immediately overrode was reported to the user as a completed
+        // optimisation while the machine was unchanged.
+        var catalog = new FakeCatalog(new SilentlyIneffectiveTweak("ghost"));
+
+        var result = await new OptimizationRunner(catalog, new NoRestorePointService())
+            .ApplyAsync(Plan(Step("ghost", 1)), createRestorePoint: false);
+
+        Assert.False(result.Succeeded);
+        Assert.Empty(result.Applied);
+        Assert.Single(result.Failures);
+        Assert.Contains("still reads as not applied", result.Failures[0].Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task AnIneffectiveTweakRollsBackTheStepsBeforeIt()
+    {
+        // Verification failure has to behave exactly like any other step failure, or a half-applied
+        // plan would be left behind whenever a write silently did not stick.
+        var log = new List<string>();
+        var catalog = new FakeCatalog(
+            new RecordingTweak("one", log),
+            new SilentlyIneffectiveTweak("ghost"));
+
+        var result = await new OptimizationRunner(catalog, new NoRestorePointService())
+            .ApplyAsync(Plan(Step("one", 1), Step("ghost", 2)), createRestorePoint: false);
+
+        Assert.True(result.RolledBack);
+        Assert.Equal(new[] { "apply:one", "revert:one" }, log);
+    }
+
+    [Fact]
+    public async Task ATweakWhoseStateCannotBeReadIsAppliedButSaysSo()
+    {
+        // Unknown means "could not read it back", not "the write failed". Rolling back here would
+        // undo a change that is probably fine, so it succeeds while saying it was not confirmed.
+        var catalog = new FakeCatalog(new UnreadableTweak("opaque"));
+
+        var result = await new OptimizationRunner(catalog, new NoRestorePointService())
+            .ApplyAsync(Plan(Step("opaque", 1)), createRestorePoint: false);
+
+        Assert.True(result.Succeeded);
+        Assert.Single(result.Applied);
+        Assert.False(result.RolledBack);
+        Assert.Contains("could not be read back", result.Results[0].Message!, StringComparison.OrdinalIgnoreCase);
+    }
+
     [Fact]
     public async Task AppliesEveryStepInPlanOrder()
     {
@@ -360,15 +463,26 @@ public class OptimizationRunnerTests
 
         public TweakDefinition Definition { get; }
 
-        public TweakState GetState() => TweakState.NotApplied;
+        public bool IsApplied { get; private set; }
+
+        // Reports its state honestly, like every real tweak: this one genuinely applies before
+        // cancelling, so claiming NotApplied afterwards would model a tweak whose write silently did
+        // not stick — a different scenario entirely, and one the runner now correctly fails the step
+        // for. See SilentlyIneffectiveTweak for that case.
+        public TweakState GetState() => IsApplied ? TweakState.Applied : TweakState.NotApplied;
 
         public void Apply()
         {
             _log.Add($"apply:{Definition.Id}");
+            IsApplied = true;
             _cancellation.Cancel();
         }
 
-        public void Revert() => _log.Add($"revert:{Definition.Id}");
+        public void Revert()
+        {
+            _log.Add($"revert:{Definition.Id}");
+            IsApplied = false;
+        }
     }
 
     [Fact]
