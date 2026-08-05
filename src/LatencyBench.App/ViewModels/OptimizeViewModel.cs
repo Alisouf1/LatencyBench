@@ -202,19 +202,29 @@ public sealed partial class OptimizeViewModel : ObservableObject
         }
     }
 
-    [RelayCommand]
+    [RelayCommand(AllowConcurrentExecutions = true)]
     private async Task AnalyzeAsync()
     {
+        // Logged before the guard, so a click that gets refused still leaves a trace. Without this,
+        // pressing Re-analyse while IsBusy was set produced absolutely nothing - no change, no
+        // message, no log line - which is indistinguishable from the button not being wired up, and
+        // is exactly how it was reported.
+        DiagnosticLog.Info("Optimize", $"Re-analyse requested. IsBusy={IsBusy}.");
+
         if (IsBusy)
         {
+            DiagnosticLog.Warn(
+                "Optimize",
+                "Re-analyse refused: a previous operation is still marked in progress.");
+            Status = "Still finishing the previous operation — try again in a moment.";
             return;
         }
 
-        // IsBusy is set and cleared with nothing but the try/finally between the two — previously
-        // Status/Results/ResultSummary were touched before the try, which meant anything unexpected
-        // in that setup (and, more concretely, ApplyAsync calling this method a second time while its
-        // own IsBusy was still true) could leave IsBusy stuck true forever, with every button on this
-        // page bound to it via IsEnabled and no way to recover short of restarting the app.
+        // AllowConcurrentExecutions is set on the command above for one specific reason: by default
+        // an AsyncRelayCommand reports CanExecute = false for as long as its task is unfinished, so a
+        // single execution that never completed would leave the Re-analyse button permanently
+        // disabled with no way back short of restarting the app. The IsBusy check above is the real
+        // re-entrancy guard, and unlike CanExecute it says so when it declines.
         IsBusy = true;
         try
         {
@@ -234,8 +244,16 @@ public sealed partial class OptimizeViewModel : ObservableObject
     /// whole operation), so the post-apply refresh silently no-opped on every single Apply, leaving
     /// Steps/PlanSummary/NonFindings showing whatever the last analysis said before the change went in.
     /// </summary>
+    /// <summary>
+    /// How long the analysis is allowed to take before it is abandoned. Generous — a slow machine
+    /// enumerating its whole device tree legitimately takes several seconds — but finite, because an
+    /// unbounded wait disables the entire tab with no way back.
+    /// </summary>
+    private static readonly TimeSpan AnalysisTimeout = TimeSpan.FromSeconds(90);
+
     private async Task RunAnalysisAsync()
     {
+        DiagnosticLog.Info("Optimize", "Analysis starting.");
         Status = "Analysing this PC…";
 
         // Results, ResultSummary and BenchmarkResult all describe the apply that just ran. Only a
@@ -253,7 +271,25 @@ public sealed partial class OptimizeViewModel : ObservableObject
 
         try
         {
-            _report = await _recommendationService.AnalyzeAsync(_traceHistory.Results.ToList());
+            // Bounded rather than awaited indefinitely. The analysis shells out to bcdedit and
+            // powercfg and queries WMI, any of which can hang on a wedged service - and because the
+            // whole page binds IsEnabled to !IsBusy, an unbounded wait there does not just delay the
+            // result, it leaves every control on this tab permanently disabled with no error and no
+            // way to recover short of restarting the app.
+            Task<RecommendationReport> analysis = _recommendationService.AnalyzeAsync(_traceHistory.Results.ToList());
+            Task finished = await Task.WhenAny(analysis, Task.Delay(AnalysisTimeout));
+
+            if (!ReferenceEquals(finished, analysis))
+            {
+                DiagnosticLog.Error(
+                    "Optimize",
+                    $"Analysis did not finish within {AnalysisTimeout.TotalSeconds:0}s and was abandoned.");
+                Status = $"Analysis did not finish within {AnalysisTimeout.TotalSeconds:0} seconds. " +
+                         "Something it queries is not responding — try Re-analyse again.";
+                return;
+            }
+
+            _report = await analysis;
 
             NonFindings.Clear();
             foreach (RuleOutcome.NotApplicable outcome in _report.NotApplicable)

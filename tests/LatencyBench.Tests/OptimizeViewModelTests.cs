@@ -34,11 +34,41 @@ public sealed class OptimizeViewModelTests
             CancellationToken cancellationToken = default) => Task.FromResult(_report);
     }
 
+    /// <summary>Returns a different report on each call, so a test can change what the "machine"
+    /// looks like between two Re-analyse runs.</summary>
+    private sealed class SwappableRecommendationService : RecommendationService
+    {
+        public SwappableRecommendationService(RecommendationReport initial)
+            : base(new SystemProfiler()) => Next = initial;
+
+        public RecommendationReport Next { get; set; }
+
+        public override Task<RecommendationReport> AnalyzeAsync(
+            IReadOnlyList<DpcIsrTestResult>? traces = null,
+            CancellationToken cancellationToken = default) => Task.FromResult(Next);
+    }
+
+    private static Recommendation Recommendation(string id) => new()
+    {
+        Id = id,
+        Title = id,
+        Category = RecommendationCategory.Input,
+        Reasoning = "test",
+        ExpectedBenefit = "test",
+        Risks = string.Empty,
+        Evidence = new[] { new Evidence("test", "test") },
+        Safety = SafetyAssessment.Build(Reversibility.FullyAutomatic, BlastRadius.SingleDevice),
+        Confidence = RecommendationConfidence.Likely,
+        Action = new RecommendedAction.ApplyTweak("mouse.pointer-precision"),
+        ImpactScore = 50,
+    };
+
     private static RecommendationReport Report(
         IReadOnlyList<RuleOutcome.NotApplicable>? notApplicable = null,
-        IReadOnlyList<RuleOutcome.Undetermined>? undetermined = null) => new()
+        IReadOnlyList<RuleOutcome.Undetermined>? undetermined = null,
+        IReadOnlyList<Recommendation>? recommendations = null) => new()
         {
-            Recommendations = Array.Empty<Recommendation>(),
+            Recommendations = recommendations ?? Array.Empty<Recommendation>(),
             NotApplicable = notApplicable ?? Array.Empty<RuleOutcome.NotApplicable>(),
             Undetermined = undetermined ?? Array.Empty<RuleOutcome.Undetermined>(),
             Failures = Array.Empty<string>(),
@@ -188,6 +218,41 @@ public sealed class OptimizeViewModelTests
 
         Assert.Equal(1, vm.SatisfiedCheckCount);
         Assert.Equal(1, vm.MeasurementPromptCount);
+    }
+
+    [Fact]
+    public async Task ReanalyseCanBeRunRepeatedlyAndPicksUpChangedSystemState()
+    {
+        // The reported symptom: pressing Re-analyse repeatedly appeared to do nothing at all. The
+        // command must stay executable after any number of runs, and each run must adopt the latest
+        // report rather than reusing the first one.
+        var service = new SwappableRecommendationService(Report());
+        var vm = new OptimizeViewModel(
+            service,
+            new DpcIsrHistoryStore(System.IO.Path.Combine(
+                System.IO.Path.GetTempPath(),
+                "LatencyBenchTests_" + Guid.NewGuid().ToString("N"),
+                "traces.json")),
+            new InterruptAffinityService(),
+            new InterruptDeviceService());
+
+        await vm.AnalyzeCommand.ExecuteAsync(null);
+        Assert.False(vm.HasPlan);
+
+        // The machine changes underneath the app - exactly what happens when a setting is altered
+        // outside LatencyBench and the user presses Re-analyse to pick it up.
+        service.Next = Report(recommendations: new[] { Recommendation("rec.input.pointer-precision") });
+
+        await vm.AnalyzeCommand.ExecuteAsync(null);
+
+        Assert.True(vm.HasPlan);
+        Assert.Single(vm.Steps);
+        Assert.False(vm.IsBusy);
+
+        // And a third run still works - the command is not one-shot.
+        service.Next = Report();
+        await vm.AnalyzeCommand.ExecuteAsync(null);
+        Assert.False(vm.HasPlan);
     }
 
     [Fact]
