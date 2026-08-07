@@ -9,11 +9,32 @@ public static class MouseChartBuilder
 {
     public readonly record struct ChartData(IReadOnlyList<ChartPoint> Points, IReadOnlyList<AxisTick> XTicks, IReadOnlyList<AxisTick> YTicks);
 
+    /// <summary>Blank border kept clear on each edge, as a fraction of the canvas.</summary>
     private const double MarginFraction = 0.08;
+
+    /// <summary>
+    /// Rejects a tick rate that cannot produce finite coordinates.
+    ///
+    /// <para>
+    /// The time-based modes divide by this value, and the first sample's elapsed time is always zero,
+    /// so a rate of zero yields 0/0 = NaN for the first point and infinity for the rest. Measured what
+    /// happens next rather than assuming it: List.Min propagates the NaN while List.Max returns
+    /// infinity, so the range becomes NaN and EVERY mapped coordinate is NaN - not just the first.
+    /// WPF does not reject a NaN coordinate loudly; it silently draws nothing, or throws inside the
+    /// render pass where the cause is no longer recoverable from the stack.
+    /// </para>
+    ///
+    /// <para>
+    /// MouseMotionAnalyzer.Analyze already refused a non-positive rate. This is the same guard on the
+    /// other consumer of the same input.
+    /// </para>
+    /// </summary>
+    private static bool IsUsableTickRate(double ticksPerMillisecond) =>
+        ticksPerMillisecond > 0.0 && double.IsFinite(ticksPerMillisecond);
 
     public static ChartData? Build(IReadOnlyList<MouseSample> samples, MouseChartMode mode, double width, double height, double ticksPerMillisecond, int tickCount = 5)
     {
-        if (samples.Count == 0 || width <= 0.0 || height <= 0.0)
+        if (samples.Count == 0 || width <= 0.0 || height <= 0.0 || !IsUsableTickRate(ticksPerMillisecond))
         {
             return null;
         }
@@ -24,7 +45,8 @@ public static class MouseChartBuilder
 
     public static (ChartData A, ChartData B)? BuildOverlay(IReadOnlyList<MouseSample> samplesA, IReadOnlyList<MouseSample> samplesB, MouseChartMode mode, double width, double height, double ticksPerMillisecond, int tickCount = 5)
     {
-        if ((samplesA.Count == 0 && samplesB.Count == 0) || width <= 0.0 || height <= 0.0)
+        if ((samplesA.Count == 0 && samplesB.Count == 0) || width <= 0.0 || height <= 0.0
+            || !IsUsableTickRate(ticksPerMillisecond))
         {
             return null;
         }
@@ -104,8 +126,10 @@ public static class MouseChartBuilder
     {
         double xRange = maxX - minX;
         double yRange = maxY - minY;
-        double marginX = width * 0.08;
-        double marginY = height * 0.08;
+        // MarginFraction was declared but never referenced while both sites hardcoded the same
+        // literal, so changing the constant would have silently done nothing.
+        double marginX = width * MarginFraction;
+        double marginY = height * MarginFraction;
         double plotWidth = width - marginX * 2.0;
         double plotHeight = height - marginY * 2.0;
         List<ChartPoint> points = dataPoints.Select((ChartPoint p) => new ChartPoint(MapX(p.X), MapY(p.Y))).ToList();
