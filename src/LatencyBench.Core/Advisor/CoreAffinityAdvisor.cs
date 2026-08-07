@@ -52,17 +52,35 @@ public static class CoreAffinityAdvisor
         }
 
         var pinnedLabel = pinnedCoreIndices.Count == 1 ? $"Core {pinnedCoreIndices[0]}" : $"Cores {string.Join(", ", pinnedCoreIndices)}";
-        var hottestPinned = interruptLoads
+
+        // Cast to a nullable so an absent core is distinguishable from one measured at zero. CoreLoad
+        // is a struct, so FirstOrDefault previously yielded default(CoreLoad) - core 0, 0% - whenever
+        // no pinned core appeared in the trace, and the line below then reported "servicing 0% of the
+        // system's interrupts, a quiet choice". That is a measurement-shaped claim built from a
+        // default value. "0% because nothing landed there" and "0% because this core is not in the
+        // data" are different facts, and only the first justifies calling the placement good. A trace
+        // saved on a machine with a different core count, or taken before a core-count change,
+        // produces exactly this.
+        CoreLoad? hottestPinned = interruptLoads
             .Where(c => pinnedCoreIndices.Contains(c.CoreIndex))
             .OrderByDescending(c => c.SharePercent)
+            .Cast<CoreLoad?>()
             .FirstOrDefault();
 
-        if (hottestPinned.SharePercent >= InterruptHotSharePercent)
+        if (hottestPinned is not { } pinned)
         {
-            return $"{pinnedLabel} pinned — but the last DPC/ISR trace shows core {hottestPinned.CoreIndex} already services {hottestPinned.SharePercent:0}% of the system's interrupts. Core {quietest.CoreIndex} is far quieter ({quietest.SharePercent:0}%).";
+            return $"{pinnedLabel} pinned, but the last DPC/ISR trace has no interrupt data for " +
+                   $"{(pinnedCoreIndices.Count == 1 ? "that core" : "those cores")} — it may pre-date the current " +
+                   $"core configuration. Run a fresh trace to check the placement. Core {quietest.CoreIndex} " +
+                   $"services the fewest interrupts in the trace that exists ({quietest.SharePercent:0}%).";
         }
 
-        return $"{pinnedLabel} pinned, servicing {hottestPinned.SharePercent:0}% of the system's interrupts — a quiet choice.";
+        if (pinned.SharePercent >= InterruptHotSharePercent)
+        {
+            return $"{pinnedLabel} pinned — but the last DPC/ISR trace shows core {pinned.CoreIndex} already services {pinned.SharePercent:0}% of the system's interrupts. Core {quietest.CoreIndex} is far quieter ({quietest.SharePercent:0}%).";
+        }
+
+        return $"{pinnedLabel} pinned, servicing {pinned.SharePercent:0}% of the system's interrupts — a quiet choice.";
     }
 
     /// <summary>
@@ -86,11 +104,26 @@ public static class CoreAffinityAdvisor
                 : $"Using Windows' default core assignment. Core {best.Index} is currently the least busy ({best.Usage:0}%) — pinning this controller to it may give steadier interrupt timing.";
         }
 
-        var pinnedUsage = pinnedCoreIndices
-            .Select(i => i >= 0 && i < coreUsagePercent.Count ? coreUsagePercent[i] : 0)
-            .Average();
+        // Out-of-range indices are dropped, not counted as zero. Substituting zero invents a reading
+        // no real core could produce and drags the pinned average down - "Cores 0, 99 pinned,
+        // averaging 40% usage" when core 0 alone sits at 80% - which can talk the user out of a
+        // switch that is genuinely warranted. An index outside the current core count is not a quiet
+        // core, it is an absent one.
+        var knownPinnedUsages = pinnedCoreIndices
+            .Where(i => i >= 0 && i < coreUsagePercent.Count)
+            .Select(i => coreUsagePercent[i])
+            .ToList();
 
         var pinnedLabel = pinnedCoreIndices.Count == 1 ? $"Core {pinnedCoreIndices[0]}" : $"Cores {string.Join(", ", pinnedCoreIndices)}";
+
+        if (knownPinnedUsages.Count == 0)
+        {
+            return $"{pinnedLabel} pinned, but no core with that index exists on this machine — the " +
+                   "affinity may have been set when the CPU was configured differently. Clear the " +
+                   "override and pin again.";
+        }
+
+        var pinnedUsage = knownPinnedUsages.Average();
 
         if (ambiguous || pinnedCoreIndices.Contains(best.Index) || pinnedUsage <= best.Usage + GoodEnoughToleranceUsagePercent)
         {
