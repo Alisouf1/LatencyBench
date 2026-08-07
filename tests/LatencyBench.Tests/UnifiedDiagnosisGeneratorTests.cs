@@ -39,16 +39,16 @@ public sealed class UnifiedDiagnosisGeneratorTests
         double spikesPerSecond,
         string topDriver = "nvlddmkm.sys",
         DateTime? savedAt = null) => new()
-    {
-        DurationSeconds = 30,
-        HighSpikesPerSecond = spikesPerSecond,
-        BorderlineSpikesPerSecond = spikesPerSecond * 3,
-        HighestDpcMicroseconds = 600,
-        HighestIsrMicroseconds = 90,
-        TopDriverName = topDriver,
-        TopDriverMaxMicroseconds = 600,
-        SavedAt = savedAt ?? DateTime.Now,
-    };
+        {
+            DurationSeconds = 30,
+            HighSpikesPerSecond = spikesPerSecond,
+            BorderlineSpikesPerSecond = spikesPerSecond * 3,
+            HighestDpcMicroseconds = 600,
+            HighestIsrMicroseconds = 90,
+            TopDriverName = topDriver,
+            TopDriverMaxMicroseconds = 600,
+            SavedAt = savedAt ?? DateTime.Now,
+        };
 
     private static ControllerSignal Controller(
         string label = "USB Controller 1",
