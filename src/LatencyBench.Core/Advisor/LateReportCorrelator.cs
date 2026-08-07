@@ -44,7 +44,14 @@ public static class LateReportCorrelator
         }
 
         var ordered = windows.OrderBy(w => w.Start).ToList();
-        var hitDrivers = new Dictionary<string, int>();
+
+        // Which distinct late windows each driver appears in — deliberately a set of window indices
+        // rather than an event tally. Counting raw events reintroduces, at the blame step, exactly the
+        // bias the lift calculation below exists to remove: a driver firing 500 times inside a single
+        // late window would outrank one present in every late window, and the burst is the weaker
+        // explanation of the two. Measured before this changed: a 500-event burst confined to one
+        // window beat a driver present in three.
+        var driverLateWindows = new Dictionary<string, HashSet<int>>(StringComparer.OrdinalIgnoreCase);
         var lateHit = new HashSet<int>();
         var onTimeHit = new HashSet<int>();
 
@@ -59,7 +66,14 @@ public static class LateReportCorrelator
             if (ordered[index].IsLate)
             {
                 lateHit.Add(index);
-                hitDrivers[spike.DriverName] = hitDrivers.GetValueOrDefault(spike.DriverName) + 1;
+
+                if (!driverLateWindows.TryGetValue(spike.DriverName, out var windowsForDriver))
+                {
+                    windowsForDriver = new HashSet<int>();
+                    driverLateWindows[spike.DriverName] = windowsForDriver;
+                }
+
+                windowsForDriver.Add(index);
             }
             else
             {
@@ -69,7 +83,14 @@ public static class LateReportCorrelator
 
         var lateShare = (double)lateHit.Count / late.Count;
         var onTimeShare = onTime.Count > 0 ? (double)onTimeHit.Count / onTime.Count : 0;
-        var topDriver = hitDrivers.OrderByDescending(kv => kv.Value).Select(kv => kv.Key).FirstOrDefault();
+
+        // Name-ordered as the tiebreak so two drivers covering the same number of windows always
+        // produce the same answer, rather than one that depends on dictionary iteration order.
+        var topDriver = driverLateWindows
+            .OrderByDescending(kv => kv.Value.Count)
+            .ThenBy(kv => kv.Key, StringComparer.OrdinalIgnoreCase)
+            .Select(kv => kv.Key)
+            .FirstOrDefault();
 
         if (lateShare < MinimumLateShare || topDriver is null)
         {
