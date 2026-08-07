@@ -79,13 +79,14 @@ public static class MouseMotionAnalyzer
         return list2;
     }
 
+    /// <summary>How far from an exact multiple of 45 degrees still counts as snapped to it.</summary>
+    private const double SnapToleranceDegrees = 2.5;
+
+    /// <summary>The eight angles an angle-snapping mouse pulls toward: the cardinals and diagonals.</summary>
+    private const int SnapDirections = 8;
+
     private static double ComputeAngleSnapScore(IReadOnlyList<MouseSample> samples, double ticksPerMillisecond)
     {
-        HashSet<int> snapBinIndices = new HashSet<int>();
-        for (int i = 0; i < 360; i += 45)
-        {
-            snapBinIndices.Add((int)((double)i / 5.0) % 72);
-        }
         double totalMagnitude = 0.0;
         double snapMagnitude = 0.0;
         long timestampTicks = samples[0].TimestampTicks;
@@ -108,25 +109,47 @@ public static class MouseMotionAnalyzer
         {
             return 0.0;
         }
-        double num3 = snapMagnitude / totalMagnitude;
-        double num4 = (double)snapBinIndices.Count * 5.0 / 360.0;
-        return num3 / num4;
+
+        double observedSnapFraction = snapMagnitude / totalMagnitude;
+
+        // What the same fraction would be if direction were spread evenly: eight targets, each with a
+        // window of 2 x SnapToleranceDegrees. Dividing by it makes 1.0 mean "no snapping" and the
+        // maximum (9.0 at the current tolerance) mean "every movement landed on a snap angle",
+        // independently of how wide the tolerance is.
+        double expectedSnapFraction = SnapDirections * (2.0 * SnapToleranceDegrees) / 360.0;
+        return observedSnapFraction / expectedSnapFraction;
+
         void FlushWindow(double windowDx, double windowDy)
         {
-            double num5 = Math.Sqrt(windowDx * windowDx + windowDy * windowDy);
-            if (!(num5 < 2.0))
+            double magnitude = Math.Sqrt(windowDx * windowDx + windowDy * windowDy);
+            if (magnitude < 2.0)
             {
-                double num6 = Math.Atan2(windowDy, windowDx) * 180.0 / Math.PI;
-                if (num6 < 0.0)
-                {
-                    num6 += 360.0;
-                }
-                int item = (int)(num6 / 5.0) % 72;
-                totalMagnitude += num5;
-                if (snapBinIndices.Contains(item))
-                {
-                    snapMagnitude += num5;
-                }
+                // Too small to have a meaningful direction; counting it would let sensor noise
+                // masquerade as snapping.
+                return;
+            }
+
+            double degrees = Math.Atan2(windowDy, windowDx) * 180.0 / Math.PI;
+            if (degrees < 0.0)
+            {
+                degrees += 360.0;
+            }
+
+            totalMagnitude += magnitude;
+
+            // Distance to the NEAREST multiple of 45, rather than testing which fixed 5-degree bin the
+            // angle falls in. The bin approach put each cardinal angle on a bin boundary - bin 9 spans
+            // [45,50) - so movement at 46 degrees counted as snapped to 45 while movement at 44 did
+            // not, despite being equally close. Real angle snapping scatters either side of its
+            // target, so roughly half of it went unrecorded and the score read low. Verified before
+            // and after: 44 and 46 degrees now score identically, where previously they were 0 and 9.
+            //
+            // Math.Round maps 359 degrees to 360, which is the correct nearest target, so wraparound
+            // needs no special case.
+            double nearestSnapAngle = Math.Round(degrees / 45.0) * 45.0;
+            if (Math.Abs(degrees - nearestSnapAngle) <= SnapToleranceDegrees)
+            {
+                snapMagnitude += magnitude;
             }
         }
     }
