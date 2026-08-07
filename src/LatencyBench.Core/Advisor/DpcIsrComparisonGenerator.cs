@@ -37,16 +37,32 @@ public static class DpcIsrComparisonGenerator
                   "Change a setting and trace again to compare.";
         }
 
-        var bestOther = otherConfigs.OrderBy(r => r.HighSpikesPerSecond).First();
+        // Chosen by the config's AVERAGE, not by whichever single saved run happened to be lowest.
+        // Selecting on one run then reporting that config's average is self-contradictory, and it
+        // misleads in the worst direction: a config with one lucky run and one terrible one would be
+        // picked over a consistently better one, and the user then compared against the lucky
+        // config's much worse average. Measured before this changed - current 5.00 against configs
+        // averaging 10.05 ("Lucky", runs 0.10 and 20.00) and 1.10 ("Steady", runs 1.00 and 1.20) -
+        // it selected Lucky and reported "50% fewer spikes, a real improvement", when the current
+        // config was in fact four and a half times worse than the best config on record.
+        //
+        // Averaging is this class's whole defence against run-to-run noise; selecting on a single run
+        // discarded it at the first step.
+        var bestOtherGroup = otherConfigs
+            .GroupBy(r => r.ConfigLabel, StringComparer.Ordinal)
+            .OrderBy(g => g.Average(r => r.HighSpikesPerSecond))
+            .ThenBy(g => g.Key, StringComparer.Ordinal)
+            .First();
+
         var currentGroup = sameConfig.Append(current).ToList();
         var currentAvg = currentGroup.Average(r => r.HighSpikesPerSecond);
-        var otherGroup = otherConfigs.Where(r => r.ConfigLabel == bestOther.ConfigLabel).ToList();
+        var otherGroup = bestOtherGroup.ToList();
         var otherAvg = otherGroup.Average(r => r.HighSpikesPerSecond);
 
         var lines = new List<string>
         {
             $"This config ({current.ConfigLabel}): {currentAvg:0.00} spikes/s over 500 µs, from {currentGroup.Count} trace(s). {Spread(currentGroup)}",
-            $"Compared to ({bestOther.ConfigLabel}): {otherAvg:0.00} spikes/s, from {otherGroup.Count} trace(s). {Spread(otherGroup)}",
+            $"Compared to ({bestOtherGroup.Key}): {otherAvg:0.00} spikes/s, from {otherGroup.Count} trace(s). {Spread(otherGroup)}",
             string.Empty,
         };
 
