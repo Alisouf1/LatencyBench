@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Collections.Generic;
 using System.Linq;
 using System.Net.NetworkInformation;
@@ -6,7 +7,13 @@ using LatencyBench.Core.Tweaks.Models;
 
 namespace LatencyBench.Core.Tweaks.Network;
 
-public sealed class NagleAlgorithmTweak : ITweak
+/// <remarks>
+/// Non-sealed, with adapter enumeration and the three registry operations marked protected virtual.
+/// Everything else is orchestration over a set of interfaces - what to record before writing, how an
+/// absent value differs from a stored one - and that is what needs pinning. Same pattern as
+/// PowerCfgRunner and SysMainServiceTweak.
+/// </remarks>
+public class NagleAlgorithmTweak : ITweak
 {
     private const string InterfacesBasePath = "SYSTEM\\CurrentControlSet\\Services\\Tcpip\\Parameters\\Interfaces";
 
@@ -36,15 +43,22 @@ public sealed class NagleAlgorithmTweak : ITweak
         return (!list.All(IsApplied)) ? TweakState.NotApplied : TweakState.Applied;
     }
 
+    /// <summary>The two values that together disable Nagle for an interface.</summary>
+    private static readonly string[] ValueNames = { "TcpAckFrequency", "TCPNoDelay" };
+
     public void Apply()
     {
         foreach (string adapterKeyPath in GetAdapterKeyPaths())
         {
-            using RegistryKey registryKey = Registry.LocalMachine.CreateSubKey(adapterKeyPath, writable: true);
-            StashIfPresent(registryKey, adapterKeyPath, "TcpAckFrequency");
-            StashIfPresent(registryKey, adapterKeyPath, "TCPNoDelay");
-            registryKey.SetValue("TcpAckFrequency", 1, RegistryValueKind.DWord);
-            registryKey.SetValue("TCPNoDelay", 1, RegistryValueKind.DWord);
+            foreach (string valueName in ValueNames)
+            {
+                StashCurrentValue(adapterKeyPath, valueName);
+            }
+
+            foreach (string valueName in ValueNames)
+            {
+                WriteValue(adapterKeyPath, valueName, 1);
+            }
         }
     }
 
@@ -52,54 +66,79 @@ public sealed class NagleAlgorithmTweak : ITweak
     {
         foreach (string adapterKeyPath in GetAdapterKeyPaths())
         {
-            using RegistryKey key = Registry.LocalMachine.CreateSubKey(adapterKeyPath, writable: true);
-            RestoreOrRemove(key, adapterKeyPath, "TcpAckFrequency");
-            RestoreOrRemove(key, adapterKeyPath, "TCPNoDelay");
+            foreach (string valueName in ValueNames)
+            {
+                RestoreOrRemove(adapterKeyPath, valueName);
+            }
         }
     }
 
-    private static IEnumerable<string> GetAdapterKeyPaths()
+    /// <summary>
+    /// One registry path per non-loopback interface. A seam so the orchestration above can be tested
+    /// against a known set of adapters rather than whatever the test machine happens to have.
+    /// </summary>
+    protected virtual IEnumerable<string> GetAdapterKeyPaths()
     {
+        // InterfacesBasePath rather than the same literal spelled out again: the constant was
+        // declared and then never referenced, so editing it would have changed nothing.
         return from nic in NetworkInterface.GetAllNetworkInterfaces()
                where nic.NetworkInterfaceType != NetworkInterfaceType.Loopback
-               select "SYSTEM\\CurrentControlSet\\Services\\Tcpip\\Parameters\\Interfaces\\" + nic.Id;
+               select $@"{InterfacesBasePath}\{nic.Id}";
     }
 
-    private static bool IsApplied(string keyPath)
+    /// <summary>The DWORD currently stored, or null when the value or the key is absent.</summary>
+    protected virtual int? ReadValue(string keyPath, string valueName)
     {
-        using RegistryKey? registryKey = Registry.LocalMachine.OpenSubKey(keyPath);
-        if (registryKey is null)
-        {
-            return false;
-        }
-
-        return registryKey.GetValue("TcpAckFrequency") is 1 && registryKey.GetValue("TCPNoDelay") is 1;
+        using RegistryKey? key = Registry.LocalMachine.OpenSubKey(keyPath);
+        return key?.GetValue(valueName) is int value ? value : null;
     }
 
-    private void StashIfPresent(RegistryKey key, string keyPath, string valueName)
+    /// <summary>Writes a DWORD, creating the interface key if Windows has not written one yet.</summary>
+    protected virtual void WriteValue(string keyPath, string valueName, int value)
     {
-        if (key.GetValue(valueName) is int num)
-        {
-            _backupStore.Save(BackupKey(keyPath, valueName), num.ToString());
-        }
-        else
-        {
-            _backupStore.Save(BackupKey(keyPath, valueName), "absent");
-        }
+        using RegistryKey key = Registry.LocalMachine.CreateSubKey(keyPath, writable: true);
+        key.SetValue(valueName, value, RegistryValueKind.DWord);
     }
 
-    private void RestoreOrRemove(RegistryKey key, string keyPath, string valueName)
+    /// <summary>Removes a value, tolerating both the value and the key being absent.</summary>
+    protected virtual void DeleteValue(string keyPath, string valueName)
     {
-        string? text = _backupStore.TryGet(BackupKey(keyPath, valueName));
-        int result;
-        if ((text == null || text == "absent") ? true : false)
+        using RegistryKey? key = Registry.LocalMachine.OpenSubKey(keyPath, writable: true);
+        key?.DeleteValue(valueName, throwOnMissingValue: false);
+    }
+
+    private bool IsApplied(string keyPath) =>
+        ValueNames.All(valueName => ReadValue(keyPath, valueName) == 1);
+
+    /// <summary>
+    /// Records what was there before, including the fact that nothing was. "absent" is a distinct
+    /// state from any number: reverting has to delete the value Windows never had rather than write
+    /// some assumed default into it.
+    /// </summary>
+    private void StashCurrentValue(string keyPath, string valueName)
+    {
+        int? current = ReadValue(keyPath, valueName);
+        _backupStore.Save(
+            BackupKey(keyPath, valueName),
+            current?.ToString(CultureInfo.InvariantCulture) ?? "absent");
+    }
+
+    private void RestoreOrRemove(string keyPath, string valueName)
+    {
+        string? saved = _backupStore.TryGet(BackupKey(keyPath, valueName));
+
+        // No backup and "absent" are treated alike: neither gives a value to put back, and in both
+        // cases removing what this tweak wrote returns the interface to Windows' own default
+        // behaviour. An unparseable backup is deliberately left alone rather than guessed at.
+        if (saved is null or "absent")
         {
-            key.DeleteValue(valueName, throwOnMissingValue: false);
+            DeleteValue(keyPath, valueName);
         }
-        else if (int.TryParse(text, out result))
+        else if (int.TryParse(saved, NumberStyles.Integer, CultureInfo.InvariantCulture, out int previous))
         {
-            key.SetValue(valueName, result, RegistryValueKind.DWord);
+            WriteValue(keyPath, valueName, previous);
         }
+
         _backupStore.Remove(BackupKey(keyPath, valueName));
     }
 
