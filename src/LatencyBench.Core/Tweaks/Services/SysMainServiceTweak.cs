@@ -6,7 +6,16 @@ using LatencyBench.Core.Tweaks.Models;
 
 namespace LatencyBench.Core.Tweaks.Services;
 
-public sealed class SysMainServiceTweak : ITweak
+/// <remarks>
+/// Non-sealed, with the four members that touch the service control manager or HKLM marked protected
+/// virtual. Everything else here is orchestration - what to record before changing anything, whether
+/// a restored start mode means the service should be running again, how an unreadable state is
+/// reported - and that is where the behaviour worth pinning lives. Overriding the four seams lets it
+/// be tested without stopping a real service or writing to the machine's service configuration.
+///
+/// Same pattern as PowerCfgRunner, RestorePointService and TweakCatalog.
+/// </remarks>
+public class SysMainServiceTweak : ITweak
 {
     private const string ServiceName = "SysMain";
 
@@ -36,8 +45,8 @@ public sealed class SysMainServiceTweak : ITweak
     {
         try
         {
-            using var controller = new ServiceController(ServiceName);
-            return controller.StartType == ServiceStartMode.Disabled && controller.Status == ServiceControllerStatus.Stopped
+            var (startType, status) = ReadServiceState();
+            return startType == ServiceStartMode.Disabled && status == ServiceControllerStatus.Stopped
                 ? TweakState.Applied
                 : TweakState.NotApplied;
         }
@@ -56,16 +65,39 @@ public sealed class SysMainServiceTweak : ITweak
         // the user or an image policy — silently turned the service back on against their wishes.
         _backupStore.Save(BackupKey, ReadStartValue().ToString());
 
-        using (var controller = new ServiceController(ServiceName))
-        {
-            if (controller.Status != ServiceControllerStatus.Stopped)
-            {
-                controller.Stop();
-                controller.WaitForStatus(ServiceControllerStatus.Stopped, StatusTimeout);
-            }
-        }
+        StopServiceIfRunning();
 
         WriteStartValue(ServiceStartValueDisabled);
+    }
+
+    /// <summary>The service's configured start mode and current status. A seam, so the orchestration
+    /// above can be tested without a real service.</summary>
+    protected virtual (ServiceStartMode StartType, ServiceControllerStatus Status) ReadServiceState()
+    {
+        using var controller = new ServiceController(ServiceName);
+        return (controller.StartType, controller.Status);
+    }
+
+    /// <summary>Stops the service and waits for it, or does nothing if it is already stopped.</summary>
+    protected virtual void StopServiceIfRunning()
+    {
+        using var controller = new ServiceController(ServiceName);
+        if (controller.Status != ServiceControllerStatus.Stopped)
+        {
+            controller.Stop();
+            controller.WaitForStatus(ServiceControllerStatus.Stopped, StatusTimeout);
+        }
+    }
+
+    /// <summary>Starts the service and waits for it, or does nothing if it is already running.</summary>
+    protected virtual void StartServiceIfStopped()
+    {
+        using var controller = new ServiceController(ServiceName);
+        if (controller.Status != ServiceControllerStatus.Running)
+        {
+            controller.Start();
+            controller.WaitForStatus(ServiceControllerStatus.Running, StatusTimeout);
+        }
     }
 
     public void Revert()
@@ -89,12 +121,7 @@ public sealed class SysMainServiceTweak : ITweak
         // Manual (3) means "available on demand", not "running now".
         if (previousStartValue is ServiceStartValueAutomatic or ServiceStartValueAutomaticDelayed)
         {
-            using var controller = new ServiceController(ServiceName);
-            if (controller.Status != ServiceControllerStatus.Running)
-            {
-                controller.Start();
-                controller.WaitForStatus(ServiceControllerStatus.Running, StatusTimeout);
-            }
+            StartServiceIfStopped();
         }
 
         _backupStore.Remove(BackupKey);
@@ -106,7 +133,8 @@ public sealed class SysMainServiceTweak : ITweak
 
     private const int ServiceStartValueDisabled = 4;
 
-    private static int ReadStartValue()
+    /// <summary>The service's configured Start value from HKLM. A seam for the same reason as above.</summary>
+    protected virtual int ReadStartValue()
     {
         using RegistryKey key = Registry.LocalMachine.OpenSubKey(ServiceKeyPath)
             ?? throw new InvalidOperationException($"Service '{ServiceName}' registry key not found.");
@@ -115,7 +143,8 @@ public sealed class SysMainServiceTweak : ITweak
             : throw new InvalidOperationException($"Service '{ServiceName}' has no Start value to back up.");
     }
 
-    private static void WriteStartValue(int startValue)
+    /// <summary>Writes the service's Start value to HKLM.</summary>
+    protected virtual void WriteStartValue(int startValue)
     {
         using RegistryKey key = Registry.LocalMachine.OpenSubKey(ServiceKeyPath, writable: true)
             ?? throw new InvalidOperationException($"Service '{ServiceName}' registry key not found.");
