@@ -19,7 +19,7 @@
 ; prior install without hand-editing (and having to remember to revert) the real version everywhere
 ; else; every normal build still gets exactly 1.0.0 from this line, unchanged.
 #ifndef MyAppVersion
-  #define MyAppVersion "1.0.0"
+  #define MyAppVersion "1.1.0"
 #endif
 ; VersionInfoVersion (used below) is Setup.exe's own Win32 file-version resource - a different
 ; thing from AppVersion above. Windows enforces a strict numeric "a.b.c.d" format for it (1-4
@@ -30,7 +30,7 @@
 ; isn't purely numeric. A separate, independently-overridable define fixes that without changing
 ; normal builds: this still defaults to the same numeric version every plain build already used.
 #ifndef MyAppFileVersion
-  #define MyAppFileVersion "1.0.0.0"
+  #define MyAppFileVersion "1.1.0.0"
 #endif
 #define MyAppPublisher "Alisouf"
 #define MyAppExeName "LatencyBench.App.exe"

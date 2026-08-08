@@ -13,7 +13,7 @@
     LatencyBenchVersion below must still be followed by a manual edit to those two files.
   -->
   <PropertyGroup>
-    <LatencyBenchVersion>1.0.0</LatencyBenchVersion>
+    <LatencyBenchVersion>1.1.0</LatencyBenchVersion>
     <Version>$(LatencyBenchVersion)</Version>
     <AssemblyVersion>$(LatencyBenchVersion).0</AssemblyVersion>
     <FileVersion>$(LatencyBenchVersion).0</FileVersion>

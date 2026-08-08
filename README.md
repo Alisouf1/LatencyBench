@@ -4,7 +4,7 @@ A Windows input-latency and interrupt diagnostic tool. It measures where latency
 comes from on a specific machine — USB port jitter, DPC/ISR spikes, interrupt placement —
 and only recommends a change when the measurement supports it.
 
-**Version 1.0.0** · Windows 10 1809+ / Windows 11 · x64 · requires administrator
+**Version 1.1.0** · Windows 10 1809+ / Windows 11 · x64 · requires administrator
 
 ## What it does
 
@@ -27,7 +27,7 @@ that could not reach a conclusion is never reported as a clean result.
 
 ## Installing
 
-Run `LatencyBench-Setup-1.0.0.exe`.
+Run `LatencyBench-Setup-1.1.0.exe`.
 
 **Windows SmartScreen will warn you.** The installer is not code-signed, so click
 **More info → Run anyway**. See [Limitations](#limitations).
@@ -67,7 +67,7 @@ build if it drifts from `installer/LatencyBench.iss` or `app.manifest`.
 
 ## Testing
 
-`dotnet test` runs 751 tests and needs no special privileges.
+`dotnet test` runs 845 tests and needs no special privileges.
 
 Three suites are opt-in because they touch real system state or need elevation:
 
@@ -106,6 +106,6 @@ Stated plainly rather than left to be discovered:
   end-to-end.
 - **Disk I/O, registry operation counts and ETW self-overhead are unmeasured.** Measuring
   them would mean shipping profiling hooks in the release build.
-- **Angle-snap scores recorded before v1.0.0** understate snapping on devices whose motion
+- **Angle-snap scores recorded before v1.1.0** understate snapping on devices whose motion
   clustered just below a cardinal angle; the detection window was offset rather than
   centred. The scale is unchanged, so old and new figures remain comparable in kind.
