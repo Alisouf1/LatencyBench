@@ -16,7 +16,18 @@ namespace LatencyBench.Core.Tweaks;
 /// single refresh of the tweak list spawn two processes per powercfg-backed tweak.
 /// </para>
 /// </summary>
-public sealed class PowerCfgRunner
+/// <remarks>
+/// Non-sealed, with the three members that reach outside the process marked virtual: <see cref="Run"/>
+/// launches powercfg.exe, and <see cref="GetActiveSchemeGuid"/> and <see cref="SchemeExists"/> read
+/// HKLM. Everything else here is orchestration on top of those three - which scheme to edit, when a
+/// write has to be followed by a re-activation, how an error is surfaced - and that orchestration is
+/// what carries the bugs worth catching. Overriding the three seams lets it be tested without
+/// launching a process or touching the machine's power configuration.
+///
+/// The same pattern is already used by RestorePointService, TweakCatalog and RecommendationService
+/// for the same reason.
+/// </remarks>
+public class PowerCfgRunner
 {
     public const string SchemeHighPerformance = "8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c";
 
@@ -44,7 +55,7 @@ public sealed class PowerCfgRunner
     /// </summary>
     private static readonly TimeSpan ProcessTimeout = TimeSpan.FromSeconds(20);
 
-    public (int ExitCode, string StdOut, string StdErr) Run(params string[] arguments)
+    public virtual (int ExitCode, string StdOut, string StdErr) Run(params string[] arguments)
     {
         ProcessStartInfo startInfo = new ProcessStartInfo("powercfg.exe")
         {
@@ -107,7 +118,7 @@ public sealed class PowerCfgRunner
 
     /// <summary>The active scheme GUID, read from the registry value Windows itself keeps up to
     /// date. No process launch and no localised text to parse.</summary>
-    public string GetActiveSchemeGuid()
+    public virtual string GetActiveSchemeGuid()
     {
         using RegistryKey? schemes = Registry.LocalMachine.OpenSubKey(PowerSchemesKey);
         if (schemes?.GetValue("ActivePowerScheme") is string active && Guid.TryParse(active, out _))
@@ -119,8 +130,6 @@ public sealed class PowerCfgRunner
             @"Could not read the active power scheme from HKLM\" + PowerSchemesKey + @"\ActivePowerScheme.");
     }
 
-    /// <summary>Windows 11 hides the High performance plan on many OEM and modern-standby systems.
-    /// Checking before activating turns a silent no-op into an explicit, explainable failure.</summary>
     /// <summary>
     /// Rejects anything that is not a GUID before it is used to build a registry path or passed to
     /// powercfg.
@@ -151,7 +160,9 @@ public sealed class PowerCfgRunner
         }
     }
 
-    public bool SchemeExists(string schemeGuid)
+    /// <summary>Windows 11 hides the High performance plan on many OEM and modern-standby systems.
+    /// Checking before activating turns a silent no-op into an explicit, explainable failure.</summary>
+    public virtual bool SchemeExists(string schemeGuid)
     {
         ValidateGuid(schemeGuid, nameof(schemeGuid));
 
