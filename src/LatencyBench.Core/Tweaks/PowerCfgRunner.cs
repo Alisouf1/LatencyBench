@@ -17,12 +17,11 @@ namespace LatencyBench.Core.Tweaks;
 /// </para>
 /// </summary>
 /// <remarks>
-/// Non-sealed, with the three members that reach outside the process marked virtual: <see cref="Run"/>
-/// launches powercfg.exe, and <see cref="GetActiveSchemeGuid"/> and <see cref="SchemeExists"/> read
-/// HKLM. Everything else here is orchestration on top of those three - which scheme to edit, when a
-/// write has to be followed by a re-activation, how an error is surfaced - and that orchestration is
-/// what carries the bugs worth catching. Overriding the three seams lets it be tested without
-/// launching a process or touching the machine's power configuration.
+/// Non-sealed, with every member that reaches outside the process marked virtual: <see cref="Run"/>
+/// launches powercfg.exe, and the rest read or write HKLM. Overriding them lets both this class's own
+/// orchestration - which scheme to edit, when a write has to be followed by a re-activation, how an
+/// error is surfaced - and the tweaks built on top of it be tested without launching a process or
+/// touching the machine's power configuration.
 ///
 /// The same pattern is already used by RestorePointService, TweakCatalog and RecommendationService
 /// for the same reason.
@@ -170,7 +169,7 @@ public class PowerCfgRunner
         return scheme is not null;
     }
 
-    public void SetActiveScheme(string schemeGuid)
+    public virtual void SetActiveScheme(string schemeGuid)
     {
         ValidateGuid(schemeGuid, nameof(schemeGuid));
 
@@ -182,7 +181,7 @@ public class PowerCfgRunner
         }
     }
 
-    public void SetAcValueIndex(string schemeGuid, string subgroupGuid, string settingGuid, uint value)
+    public virtual void SetAcValueIndex(string schemeGuid, string subgroupGuid, string settingGuid, uint value)
     {
         ValidateGuid(schemeGuid, nameof(schemeGuid));
         ValidateGuid(subgroupGuid, nameof(subgroupGuid));
@@ -211,7 +210,7 @@ public class PowerCfgRunner
     /// scheme has never had the value changed. Returns null when the setting does not exist on this
     /// machine at all (for example a processor setting on a system that does not expose it).
     /// </summary>
-    public uint? QueryAcValueIndex(string schemeGuid, string subgroupGuid, string settingGuid)
+    public virtual uint? QueryAcValueIndex(string schemeGuid, string subgroupGuid, string settingGuid)
     {
         ValidateGuid(schemeGuid, nameof(schemeGuid));
         ValidateGuid(subgroupGuid, nameof(subgroupGuid));
